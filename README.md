@@ -80,22 +80,36 @@ cargo build --release
 | `tempo_swap` | Swap tokens on DEX |
 | `tempo_faucet` | Request testnet tokens |
 
-## Usage
+## Example Prompts
 
-**Check balance:**
+<details>
+<summary>Try these prompts to test all tools</summary>
+
+**List tokens** (`tempo_list_tokens`)
+> "What tokens are available on Tempo?"
+
+**Check balance** (`tempo_get_balance`)
 > "What's the TUSD balance for 0x1234...?"
 
-**Get a quote:**
+**Get DEX quote** (`tempo_get_dex_quote`)
 > "How much TEUR would I get for 100 TUSD?"
 
-**Transfer tokens:**
+**Get transaction** (`tempo_get_transaction`)
+> "Show me transaction 0xabc..."
+
+**Decode transaction** (`tempo_decode_transaction`)
+> "What happened in transaction 0xabc...?"
+
+**Request from faucet** (`tempo_faucet`)
+> "Get me some testnet TUSD from the faucet"
+
+**Transfer tokens** (`tempo_transfer`)
 > "Send 50 TUSD to 0xabcd..."
 
-**Swap tokens:**
+**Swap tokens** (`tempo_swap`)
 > "Swap 100 TUSD for TEUR"
 
-**Request from faucet:**
-> "Get me some testnet TUSD"
+</details>
 
 ## Network
 
