@@ -33,5 +33,6 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Use mcp-proxy to bridge stdio to HTTP
-# mcp-proxy runs the stdio server and exposes it via HTTP
-ENTRYPOINT ["sh", "-c", "mcp-proxy --port $PORT -- tempo-mcp"]
+# mcp-proxy runs the stdio server and exposes it via SSE/HTTP
+# --host 0.0.0.0 needed for Docker container networking
+ENTRYPOINT ["sh", "-c", "mcp-proxy --host 0.0.0.0 --port=$PORT tempo-mcp"]
