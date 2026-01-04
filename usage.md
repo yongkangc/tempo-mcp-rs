@@ -1,6 +1,6 @@
-# Usage with Claude Desktop
+# Usage
 
-Add to `~/.config/claude/claude_desktop_config.json`:
+Add the following config to your MCP client:
 
 ```json
 {
@@ -12,7 +12,77 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop, then ask:
+## MCP Client Configuration
+
+<details>
+  <summary>Claude Desktop</summary>
+
+Add to `~/.config/claude/claude_desktop_config.json` (Linux) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "/path/to/tempo-mcp-rs/target/release/tempo-mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop after updating the config.
+
+</details>
+
+<details>
+  <summary>Claude Code</summary>
+
+Use the Claude Code CLI to add the Tempo MCP server:
+
+```bash
+claude mcp add tempo /path/to/tempo-mcp-rs/target/release/tempo-mcp
+```
+
+</details>
+
+<details>
+  <summary>Codex</summary>
+
+Follow the [configure MCP guide](https://github.com/openai/codex/blob/main/docs/advanced.md#model-context-protocol-mcp) using the standard config from above. You can also install using the Codex CLI:
+
+```bash
+codex mcp add tempo -- /path/to/tempo-mcp-rs/target/release/tempo-mcp
+```
+
+</details>
+
+<details>
+  <summary>Cursor</summary>
+
+Go to `Cursor Settings` -> `MCP` -> `New MCP Server`. Use the config provided above.
+
+</details>
+
+<details>
+  <summary>VS Code / Copilot</summary>
+
+Follow the MCP install [guide](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server), with the standard config from above. You can also install using the VS Code CLI:
+
+```bash
+code --add-mcp '{"name":"tempo","command":"/path/to/tempo-mcp-rs/target/release/tempo-mcp","args":[],"env":{}}'
+```
+
+</details>
+
+<details>
+  <summary>Windsurf</summary>
+
+Follow the [configure MCP guide](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json) using the standard config from above.
+
+</details>
+
+## Your First Prompt
+
+After configuring your MCP client, try these prompts:
 
 > "What tokens are available on Tempo?"
 
