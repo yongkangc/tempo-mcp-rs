@@ -128,13 +128,13 @@ export ANTHROPIC_API_KEY=your_key
 
 ## Test Priorities
 
-1. **P0**: Token resolution, amount parsing (core logic) ✓
-2. **P1**: MCP protocol compliance (server works) ✓
-3. **P2**: Tool execution with mocks (tools work)
-4. **P3**: Live testnet tests (e2e verification)
+1. **P0**: Token resolution, amount parsing (core logic) - done
+2. **P1**: MCP protocol compliance (server works) - done
+3. **P2**: Tool execution with mocks
+4. **P3**: Live testnet tests
 
-## Current Test Coverage
+## Coverage
 
-- 22 unit tests passing
-- 4 integration tests (ignored by default, require build/network)
-- 2 test scripts for manual testing
+- 22 unit tests
+- 4 integration tests (ignored by default)
+- 2 test scripts

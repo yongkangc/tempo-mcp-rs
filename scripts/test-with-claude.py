@@ -203,11 +203,11 @@ def run_test():
                 print(f"Result: {result[:200]}..." if len(result) > 200 else f"Result: {result}")
 
                 if tool_use.name == test["expected_tool"]:
-                    print("✓ PASS: Correct tool called")
+                    print("PASS: Correct tool called")
                 else:
-                    print(f"✗ FAIL: Expected {test['expected_tool']}, got {tool_use.name}")
+                    print(f"FAIL: Expected {test['expected_tool']}, got {tool_use.name}")
             else:
-                print("✗ FAIL: No tool called")
+                print("FAIL: No tool called")
                 print(f"Response: {response.content}")
 
         print("\n=== Integration test complete ===")
