@@ -19,6 +19,15 @@ async fn get_client() -> &'static TempoClient {
     CLIENT.get_or_init(|| async { TempoClient::new() }).await
 }
 
+/// Convert a tool result to MCP CallToolResult
+#[inline]
+fn to_mcp_result(result: anyhow::Result<String>) -> Result<CallToolResult, rmcp::Error> {
+    match result {
+        Ok(text) => Ok(CallToolResult::success(vec![Content::text(text)])),
+        Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+    }
+}
+
 #[derive(Clone)]
 struct TempoService;
 
@@ -36,10 +45,7 @@ impl TempoService {
     ) -> Result<CallToolResult, rmcp::Error> {
         let client = get_client().await;
         let input = GetBalanceInput { address, token };
-        match get_balance(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(get_balance(client, input).await)
     }
 
     #[tool(description = "Get transaction details by hash from Tempo blockchain")]
@@ -51,10 +57,7 @@ impl TempoService {
     ) -> Result<CallToolResult, rmcp::Error> {
         let client = get_client().await;
         let input = GetTransactionInput { hash };
-        match get_transaction(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(get_transaction(client, input).await)
     }
 
     #[tool(description = "Decode a Tempo transaction and explain what happened")]
@@ -66,10 +69,7 @@ impl TempoService {
     ) -> Result<CallToolResult, rmcp::Error> {
         let client = get_client().await;
         let input = GetTransactionInput { hash };
-        match decode_transaction(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(decode_transaction(client, input).await)
     }
 
     #[tool(description = "Get a quote for swapping tokens on Tempo DEX")]
@@ -95,10 +95,7 @@ impl TempoService {
             amount,
             direction,
         };
-        match get_dex_quote(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(get_dex_quote(client, input).await)
     }
 
     #[tool(description = "List known tokens on Tempo blockchain")]
@@ -130,10 +127,7 @@ impl TempoService {
             amount,
             token,
         };
-        match transfer(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(transfer(client, input).await)
     }
 
     #[tool(description = "Swap tokens on Tempo DEX")]
@@ -163,10 +157,7 @@ impl TempoService {
             amount_in,
             min_amount_out,
         };
-        match swap(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(swap(client, input).await)
     }
 
     #[tool(description = "Request tokens from Tempo testnet faucet")]
@@ -181,10 +172,7 @@ impl TempoService {
     ) -> Result<CallToolResult, rmcp::Error> {
         let client = get_client().await;
         let input = FaucetInput { private_key, token };
-        match faucet(client, input).await {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
-        }
+        to_mcp_result(faucet(client, input).await)
     }
 }
 

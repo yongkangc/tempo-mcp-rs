@@ -106,7 +106,7 @@ fn resolve_token(token: Option<&str>) -> Result<TokenInfo> {
         }
         return Ok(TokenInfo {
             address,
-            symbol: "UNKNOWN".to_string(),
+            symbol: "UNKNOWN",
             decimals: 6,
         });
     }
@@ -133,12 +133,13 @@ pub async fn get_balance(client: &TempoClient, input: GetBalanceInput) -> Result
 pub async fn get_transaction(client: &TempoClient, input: GetTransactionInput) -> Result<String> {
     let hash: B256 = input.hash.parse()?;
 
-    let tx = client
-        .get_transaction(hash)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
+    // Fetch transaction and receipt in parallel
+    let (tx_opt, receipt) = tokio::try_join!(
+        client.get_transaction(hash),
+        client.get_transaction_receipt(hash)
+    )?;
 
-    let receipt = client.get_transaction_receipt(hash).await?;
+    let tx = tx_opt.ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
 
     let status = match &receipt {
         Some(r) => {
@@ -192,15 +193,14 @@ pub async fn decode_transaction(
 ) -> Result<String> {
     let hash: B256 = input.hash.parse()?;
 
-    let tx = client
-        .get_transaction(hash)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
+    // Fetch transaction and receipt in parallel
+    let (tx_opt, receipt_opt) = tokio::try_join!(
+        client.get_transaction(hash),
+        client.get_transaction_receipt(hash)
+    )?;
 
-    let receipt = client
-        .get_transaction_receipt(hash)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Transaction still pending"))?;
+    let tx = tx_opt.ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
+    let receipt = receipt_opt.ok_or_else(|| anyhow::anyhow!("Transaction still pending"))?;
 
     let status = if receipt.status == "0x1" {
         "Successful"
@@ -232,7 +232,7 @@ pub async fn decode_transaction(
 
             let token_info = get_token_by_address(log.address).unwrap_or(TokenInfo {
                 address: log.address,
-                symbol: "tokens".to_string(),
+                symbol: "tokens",
                 decimals: 6,
             });
 

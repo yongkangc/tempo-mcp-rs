@@ -33,7 +33,6 @@ schemars = "0.8"
 
 # Error handling
 anyhow = "1.0"
-thiserror = "1.0"
 
 # Utilities
 hex = "0.4"

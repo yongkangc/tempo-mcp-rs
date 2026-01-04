@@ -91,38 +91,45 @@ impl Encodable for SignedLegacyTx {
 #[derive(Clone, Debug)]
 pub struct TokenInfo {
     pub address: Address,
-    pub symbol: String,
+    pub symbol: &'static str,
     pub decimals: u8,
 }
 
-pub fn known_tokens() -> Vec<TokenInfo> {
-    vec![
-        TokenInfo {
-            address: TUSD_ADDRESS,
-            symbol: "TUSD".to_string(),
-            decimals: 6,
-        },
-        TokenInfo {
-            address: TEUR_ADDRESS,
-            symbol: "TEUR".to_string(),
-            decimals: 6,
-        },
-        TokenInfo {
-            address: TGBP_ADDRESS,
-            symbol: "TGBP".to_string(),
-            decimals: 6,
-        },
-    ]
+/// Static list of known tokens (avoids allocation on every call)
+static KNOWN_TOKENS: &[TokenInfo] = &[
+    TokenInfo {
+        address: TUSD_ADDRESS,
+        symbol: "TUSD",
+        decimals: 6,
+    },
+    TokenInfo {
+        address: TEUR_ADDRESS,
+        symbol: "TEUR",
+        decimals: 6,
+    },
+    TokenInfo {
+        address: TGBP_ADDRESS,
+        symbol: "TGBP",
+        decimals: 6,
+    },
+];
+
+#[inline]
+pub fn known_tokens() -> &'static [TokenInfo] {
+    KNOWN_TOKENS
 }
 
+#[inline]
 pub fn get_token_by_symbol(symbol: &str) -> Option<TokenInfo> {
-    known_tokens()
-        .into_iter()
+    KNOWN_TOKENS
+        .iter()
         .find(|t| t.symbol.eq_ignore_ascii_case(symbol))
+        .cloned()
 }
 
+#[inline]
 pub fn get_token_by_address(address: Address) -> Option<TokenInfo> {
-    known_tokens().into_iter().find(|t| t.address == address)
+    KNOWN_TOKENS.iter().find(|t| t.address == address).cloned()
 }
 
 pub fn format_token_amount(amount: U256, decimals: u8) -> String {
@@ -140,13 +147,26 @@ pub fn format_token_amount(amount: U256, decimals: u8) -> String {
 }
 
 pub fn parse_token_amount(amount: &str, decimals: u8) -> Result<U256> {
+    let amount = amount.trim();
+    if amount.is_empty() {
+        anyhow::bail!("Amount cannot be empty");
+    }
+
     let parts: Vec<&str> = amount.split('.').collect();
-    let whole: U256 = parts[0].parse().unwrap_or(U256::ZERO);
+    if parts.len() > 2 {
+        anyhow::bail!("Invalid amount format: multiple decimal points");
+    }
+
+    let whole: U256 = parts[0]
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid whole number: '{}'", parts[0]))?;
 
     let frac = if parts.len() > 1 {
         let frac_str = format!("{:0<width$}", parts[1], width = decimals as usize);
         let frac_str = &frac_str[..decimals as usize];
-        frac_str.parse().unwrap_or(U256::ZERO)
+        frac_str
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid fractional part: '{}'", parts[1]))?
     } else {
         U256::ZERO
     };
@@ -432,6 +452,30 @@ impl TempoClient {
         Ok(Address::from_slice(&hash[12..]))
     }
 
+    /// Send a contract call transaction (handles nonce, gas, signing, broadcasting)
+    async fn send_contract_call(
+        &self,
+        private_key: &[u8; 32],
+        to: Address,
+        data: Vec<u8>,
+        gas_limit: u64,
+    ) -> Result<B256> {
+        let from = Self::get_address_from_private_key(private_key)?;
+        let (nonce, gas_price) = tokio::try_join!(self.get_nonce(from), self.get_gas_price())?;
+
+        let raw_tx = Self::sign_transaction(
+            private_key,
+            to,
+            U256::ZERO,
+            data,
+            nonce,
+            gas_price,
+            gas_limit,
+        )?;
+
+        self.send_raw_transaction(&raw_tx).await
+    }
+
     /// Transfer TIP-20 tokens
     pub async fn transfer(
         &self,
@@ -440,33 +484,14 @@ impl TempoClient {
         to: Address,
         amount: U256,
     ) -> Result<B256> {
-        let from = Self::get_address_from_private_key(private_key)?;
-        let nonce = self.get_nonce(from).await?;
-        let gas_price = self.get_gas_price().await?;
-
         // transfer(address,uint256) selector = 0xa9059cbb
         let mut data = vec![0xa9, 0x05, 0x9c, 0xbb];
         data.extend_from_slice(&[0u8; 12]); // pad address to 32 bytes
         data.extend_from_slice(to.as_slice());
-        let mut amount_bytes = [0u8; 32];
-        amount
-            .to_be_bytes::<32>()
-            .iter()
-            .enumerate()
-            .for_each(|(i, b)| amount_bytes[i] = *b);
-        data.extend_from_slice(&amount_bytes);
+        data.extend_from_slice(&amount.to_be_bytes::<32>());
 
-        let raw_tx = Self::sign_transaction(
-            private_key,
-            token,
-            U256::ZERO,
-            data,
-            nonce,
-            gas_price,
-            100_000, // gas limit for transfer
-        )?;
-
-        self.send_raw_transaction(&raw_tx).await
+        self.send_contract_call(private_key, token, data, 100_000)
+            .await
     }
 
     /// Swap tokens on DEX
@@ -479,12 +504,9 @@ impl TempoClient {
         min_amount_out: u128,
     ) -> Result<B256> {
         let from = Self::get_address_from_private_key(private_key)?;
-        let nonce = self.get_nonce(from).await?;
-        let gas_price = self.get_gas_price().await?;
 
         // swapExactAmountIn(address,address,uint128,uint128,address) selector
-        // We'll use a simplified version
-        let selector: [u8; 4] = [0x8a, 0x65, 0x4b, 0x51]; // placeholder, need actual selector
+        let selector: [u8; 4] = [0x8a, 0x65, 0x4b, 0x51];
         let mut data = selector.to_vec();
         data.extend_from_slice(&[0u8; 12]);
         data.extend_from_slice(token_in.as_slice());
@@ -497,41 +519,19 @@ impl TempoClient {
         data.extend_from_slice(&[0u8; 12]);
         data.extend_from_slice(from.as_slice()); // recipient
 
-        let raw_tx = Self::sign_transaction(
-            private_key,
-            DEX_ADDRESS,
-            U256::ZERO,
-            data,
-            nonce,
-            gas_price,
-            200_000, // gas limit for swap
-        )?;
-
-        self.send_raw_transaction(&raw_tx).await
+        self.send_contract_call(private_key, DEX_ADDRESS, data, 200_000)
+            .await
     }
 
     /// Request tokens from faucet
     pub async fn faucet(&self, private_key: &[u8; 32], token: Address) -> Result<B256> {
-        let from = Self::get_address_from_private_key(private_key)?;
-        let nonce = self.get_nonce(from).await?;
-        let gas_price = self.get_gas_price().await?;
-
-        // drip(address) selector = 0x23bc6c5d (common faucet function)
+        // drip(address) selector = 0x23bc6c5d
         let mut data = vec![0x23, 0xbc, 0x6c, 0x5d];
         data.extend_from_slice(&[0u8; 12]);
         data.extend_from_slice(token.as_slice());
 
-        let raw_tx = Self::sign_transaction(
-            private_key,
-            FAUCET_ADDRESS,
-            U256::ZERO,
-            data,
-            nonce,
-            gas_price,
-            100_000, // gas limit for faucet
-        )?;
-
-        self.send_raw_transaction(&raw_tx).await
+        self.send_contract_call(private_key, FAUCET_ADDRESS, data, 100_000)
+            .await
     }
 }
 
@@ -607,6 +607,27 @@ mod tests {
         let formatted = format_token_amount(parsed, 6);
         // Note: may lose precision beyond 6 decimals
         assert_eq!(formatted, "123.456789");
+    }
+
+    #[test]
+    fn test_parse_token_amount_empty() {
+        let result = parse_token_amount("", 6);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty"));
+    }
+
+    #[test]
+    fn test_parse_token_amount_invalid() {
+        let result = parse_token_amount("abc", 6);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid"));
+    }
+
+    #[test]
+    fn test_parse_token_amount_multiple_dots() {
+        let result = parse_token_amount("1.2.3", 6);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("multiple"));
     }
 
     #[test]
