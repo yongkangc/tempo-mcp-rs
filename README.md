@@ -49,6 +49,77 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
+### Codex
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.tempo]
+command = "tempo-mcp"
+```
+
+Or via CLI:
+
+```bash
+codex mcp add tempo -- tempo-mcp
+```
+
+### Amp
+
+Add to `.amp/settings.json` in your project:
+
+```json
+{
+  "amp.mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
+Or via CLI:
+
+```bash
+amp mcp add --workspace tempo -- tempo-mcp
+```
+
+### VS Code
+
+Add to `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
+Or add globally via Command Palette: `MCP: Add Server`
+
+### Gemini CLI
+
+Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
+Or via CLI:
+
+```bash
+gemini mcp add tempo -- tempo-mcp
+```
+
 ### Cursor
 
 Add to Cursor MCP settings with the same config above.
