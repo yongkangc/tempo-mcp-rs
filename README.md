@@ -1,5 +1,7 @@
 # tempo-mcp-rs
 
+[![smithery badge](https://smithery.ai/badge/@yongkangc/tempo-mcp-rs)](https://smithery.ai/server/@yongkangc/tempo-mcp-rs)
+
 MCP server for Tempo blockchain - enabling AI agents to read and write onchain data.
 
 ## Features
