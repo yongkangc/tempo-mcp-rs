@@ -11,6 +11,18 @@ MCP server for Tempo blockchain - enabling AI agents to read and write onchain d
 ## Installation
 
 ```bash
+cargo install tempo-mcp
+```
+
+Then add to your MCP client:
+
+```bash
+claude mcp add tempo tempo-mcp
+```
+
+Or build from source:
+
+```bash
 git clone https://github.com/yongkangc/tempo-mcp-rs.git
 cd tempo-mcp-rs
 cargo build --release

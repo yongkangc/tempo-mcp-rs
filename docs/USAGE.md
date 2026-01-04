@@ -2,13 +2,19 @@
 
 [![smithery badge](https://smithery.ai/badge/tempo-mcp)](https://smithery.ai/server/tempo-mcp) [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=tempo&config=eyJjb21tYW5kIjoidGVtcG8tbWNwIn0=)
 
-Add the following config to your MCP client:
+## Quick Install
+
+```bash
+cargo install tempo-mcp
+```
+
+Then add to your MCP client:
 
 ```json
 {
   "mcpServers": {
     "tempo": {
-      "command": "/path/to/tempo-mcp-rs/target/release/tempo-mcp"
+      "command": "tempo-mcp"
     }
   }
 }
@@ -25,7 +31,7 @@ Add to `~/.config/claude/claude_desktop_config.json` (Linux) or `~/Library/Appli
 {
   "mcpServers": {
     "tempo": {
-      "command": "/path/to/tempo-mcp-rs/target/release/tempo-mcp"
+      "command": "tempo-mcp"
     }
   }
 }
@@ -41,7 +47,7 @@ Restart Claude Desktop after updating the config.
 Use the Claude Code CLI to add the Tempo MCP server:
 
 ```bash
-claude mcp add tempo /path/to/tempo-mcp-rs/target/release/tempo-mcp
+claude mcp add tempo tempo-mcp
 ```
 
 </details>
@@ -52,7 +58,7 @@ claude mcp add tempo /path/to/tempo-mcp-rs/target/release/tempo-mcp
 Follow the [configure MCP guide](https://github.com/openai/codex/blob/main/docs/advanced.md#model-context-protocol-mcp) using the standard config from above. You can also install using the Codex CLI:
 
 ```bash
-codex mcp add tempo -- /path/to/tempo-mcp-rs/target/release/tempo-mcp
+codex mcp add tempo -- tempo-mcp
 ```
 
 </details>
@@ -74,7 +80,7 @@ Or manually: Go to `Cursor Settings` -> `MCP` -> `New MCP Server`. Use the confi
 Follow the MCP install [guide](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server), with the standard config from above. You can also install using the VS Code CLI:
 
 ```bash
-code --add-mcp '{"name":"tempo","command":"/path/to/tempo-mcp-rs/target/release/tempo-mcp","args":[],"env":{}}'
+code --add-mcp '{"name":"tempo","command":"tempo-mcp","args":[],"env":{}}'
 ```
 
 </details>
