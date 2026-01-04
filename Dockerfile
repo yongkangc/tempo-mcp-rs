@@ -35,4 +35,4 @@ EXPOSE 8000
 # Use rmcp-proxy to bridge stdio to HTTP
 # rmcp-proxy runs the stdio server and exposes it via SSE/HTTP
 # --host 0.0.0.0 needed for Docker container networking
-ENTRYPOINT ["sh", "-c", "rmcp-proxy --host 0.0.0.0 --port=$PORT tempo-mcp"]
+ENTRYPOINT ["sh", "-c", "rmcp-proxy --host 0.0.0.0 --port=$PORT -- tempo-mcp"]
