@@ -5,25 +5,47 @@
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 struct McpTestClient {
     child: Child,
+    stdin: ChildStdin,
+    reader: BufReader<ChildStdout>,
     request_id: u64,
 }
 
 impl McpTestClient {
     fn new() -> Self {
-        let child = Command::new("cargo")
-            .args(["run", "--bin", "tempo-mcp"])
+        // Build first to ensure binary exists
+        let build = Command::new("cargo")
+            .args(["build", "--bin", "tempo-mcp"])
+            .output()
+            .expect("Failed to build");
+
+        if !build.status.success() {
+            panic!("Build failed: {}", String::from_utf8_lossy(&build.stderr));
+        }
+
+        let mut child = Command::new("./target/debug/tempo-mcp")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .expect("Failed to spawn tempo-mcp");
 
+        // Give the server a moment to start
+        thread::sleep(Duration::from_millis(100));
+
+        let stdin = child.stdin.take().expect("No stdin");
+        let stdout = child.stdout.take().expect("No stdout");
+        let reader = BufReader::new(stdout);
+
         Self {
             child,
+            stdin,
+            reader,
             request_id: 0,
         }
     }
@@ -37,23 +59,25 @@ impl McpTestClient {
             "params": params
         });
 
-        let stdin = self.child.stdin.as_mut().expect("No stdin");
         let request_str = serde_json::to_string(&request).unwrap();
-        writeln!(stdin, "{}", request_str).expect("Failed to write");
-        stdin.flush().expect("Failed to flush");
+        writeln!(self.stdin, "{}", request_str).expect("Failed to write");
+        self.stdin.flush().expect("Failed to flush");
 
-        let stdout = self.child.stdout.as_mut().expect("No stdout");
-        let mut reader = BufReader::new(stdout);
         let mut response_line = String::new();
-        reader
+        self.reader
             .read_line(&mut response_line)
             .expect("Failed to read response");
 
-        serde_json::from_str(&response_line).expect("Failed to parse response")
+        if response_line.is_empty() {
+            panic!("Empty response from server");
+        }
+
+        serde_json::from_str(&response_line)
+            .unwrap_or_else(|e| panic!("Failed to parse response: {}\nLine: {}", e, response_line))
     }
 
     fn initialize(&mut self) -> Value {
-        self.send_request(
+        let response = self.send_request(
             "initialize",
             json!({
                 "protocolVersion": "2024-11-05",
@@ -63,7 +87,18 @@ impl McpTestClient {
                     "version": "1.0.0"
                 }
             }),
-        )
+        );
+
+        // Send initialized notification (no response expected)
+        let notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+        let notif_str = serde_json::to_string(&notification).unwrap();
+        writeln!(self.stdin, "{}", notif_str).expect("Failed to write notification");
+        self.stdin.flush().expect("Failed to flush");
+
+        response
     }
 
     fn list_tools(&mut self) -> Value {
