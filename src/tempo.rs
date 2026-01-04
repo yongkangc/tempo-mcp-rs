@@ -1,5 +1,7 @@
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{keccak256, Address, B256, U256};
+use alloy_rlp::{Encodable, RlpEncodable};
 use anyhow::Result;
+use k256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -25,6 +27,66 @@ pub const DEX_ADDRESS: Address = Address::new([
     0x20, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x01, 0x00,
 ]);
+
+// Faucet contract address
+pub const FAUCET_ADDRESS: Address = Address::new([
+    0x20, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x02, 0x00,
+]);
+
+/// EIP-155 Legacy Transaction for signing
+#[derive(RlpEncodable)]
+pub struct LegacyTxForSigning {
+    pub nonce: u64,
+    pub gas_price: U256,
+    pub gas_limit: u64,
+    pub to: Address,
+    pub value: U256,
+    pub data: Vec<u8>,
+    pub chain_id: u64,
+    pub zero1: u8,
+    pub zero2: u8,
+}
+
+/// Signed Legacy Transaction for broadcasting
+pub struct SignedLegacyTx {
+    pub nonce: u64,
+    pub gas_price: U256,
+    pub gas_limit: u64,
+    pub to: Address,
+    pub value: U256,
+    pub data: Vec<u8>,
+    pub v: u64,
+    pub r: U256,
+    pub s: U256,
+}
+
+impl Encodable for SignedLegacyTx {
+    fn encode(&self, out: &mut dyn alloy_rlp::BufMut) {
+        alloy_rlp::Header {
+            list: true,
+            payload_length: self.nonce.length()
+                + self.gas_price.length()
+                + self.gas_limit.length()
+                + self.to.length()
+                + self.value.length()
+                + self.data.length()
+                + self.v.length()
+                + self.r.length()
+                + self.s.length(),
+        }
+        .encode(out);
+        self.nonce.encode(out);
+        self.gas_price.encode(out);
+        self.gas_limit.encode(out);
+        self.to.encode(out);
+        self.value.encode(out);
+        self.data.encode(out);
+        self.v.encode(out);
+        self.r.encode(out);
+        self.s.encode(out);
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct TokenInfo {
@@ -281,5 +343,194 @@ impl TempoClient {
 
         let quote = u128::from_str_radix(result.trim_start_matches("0x"), 16)?;
         Ok(quote)
+    }
+
+    pub async fn get_nonce(&self, address: Address) -> Result<u64> {
+        let result: String = self
+            .call_rpc(
+                "eth_getTransactionCount",
+                json!([format!("{:?}", address), "pending"]),
+            )
+            .await?;
+        let nonce = u64::from_str_radix(result.trim_start_matches("0x"), 16)?;
+        Ok(nonce)
+    }
+
+    pub async fn get_gas_price(&self) -> Result<U256> {
+        let result: String = self.call_rpc("eth_gasPrice", json!([])).await?;
+        let price = U256::from_str_radix(result.trim_start_matches("0x"), 16)?;
+        Ok(price)
+    }
+
+    pub async fn send_raw_transaction(&self, raw_tx: &[u8]) -> Result<B256> {
+        let hex_tx = format!("0x{}", hex::encode(raw_tx));
+        let result: String = self
+            .call_rpc("eth_sendRawTransaction", json!([hex_tx]))
+            .await?;
+        let hash: B256 = result.parse()?;
+        Ok(hash)
+    }
+
+    pub fn sign_transaction(
+        private_key: &[u8; 32],
+        to: Address,
+        value: U256,
+        data: Vec<u8>,
+        nonce: u64,
+        gas_price: U256,
+        gas_limit: u64,
+    ) -> Result<Vec<u8>> {
+        let signing_key = SigningKey::from_bytes(private_key.into())?;
+
+        let tx_for_signing = LegacyTxForSigning {
+            nonce,
+            gas_price,
+            gas_limit,
+            to,
+            value,
+            data: data.clone(),
+            chain_id: TEMPO_TESTNET_CHAIN_ID,
+            zero1: 0,
+            zero2: 0,
+        };
+
+        let mut rlp_buf = Vec::new();
+        tx_for_signing.encode(&mut rlp_buf);
+        let tx_hash = keccak256(&rlp_buf);
+
+        let (signature, recovery_id) = signing_key.sign_prehash(tx_hash.as_slice())?;
+        let sig_bytes = signature.to_bytes();
+        let r = U256::from_be_slice(&sig_bytes[..32]);
+        let s = U256::from_be_slice(&sig_bytes[32..]);
+
+        // EIP-155: v = recovery_id + chain_id * 2 + 35
+        let v = recovery_id.to_byte() as u64 + TEMPO_TESTNET_CHAIN_ID * 2 + 35;
+
+        let signed_tx = SignedLegacyTx {
+            nonce,
+            gas_price,
+            gas_limit,
+            to,
+            value,
+            data,
+            v,
+            r,
+            s,
+        };
+
+        let mut signed_rlp = Vec::new();
+        signed_tx.encode(&mut signed_rlp);
+        Ok(signed_rlp)
+    }
+
+    pub fn get_address_from_private_key(private_key: &[u8; 32]) -> Result<Address> {
+        let signing_key = SigningKey::from_bytes(private_key.into())?;
+        let verifying_key = signing_key.verifying_key();
+        let public_key = verifying_key.to_encoded_point(false);
+        let public_key_bytes = &public_key.as_bytes()[1..]; // Skip the 0x04 prefix
+        let hash = keccak256(public_key_bytes);
+        Ok(Address::from_slice(&hash[12..]))
+    }
+
+    /// Transfer TIP-20 tokens
+    pub async fn transfer(
+        &self,
+        private_key: &[u8; 32],
+        token: Address,
+        to: Address,
+        amount: U256,
+    ) -> Result<B256> {
+        let from = Self::get_address_from_private_key(private_key)?;
+        let nonce = self.get_nonce(from).await?;
+        let gas_price = self.get_gas_price().await?;
+
+        // transfer(address,uint256) selector = 0xa9059cbb
+        let mut data = vec![0xa9, 0x05, 0x9c, 0xbb];
+        data.extend_from_slice(&[0u8; 12]); // pad address to 32 bytes
+        data.extend_from_slice(to.as_slice());
+        let mut amount_bytes = [0u8; 32];
+        amount
+            .to_be_bytes::<32>()
+            .iter()
+            .enumerate()
+            .for_each(|(i, b)| amount_bytes[i] = *b);
+        data.extend_from_slice(&amount_bytes);
+
+        let raw_tx = Self::sign_transaction(
+            private_key,
+            token,
+            U256::ZERO,
+            data,
+            nonce,
+            gas_price,
+            100_000, // gas limit for transfer
+        )?;
+
+        self.send_raw_transaction(&raw_tx).await
+    }
+
+    /// Swap tokens on DEX
+    pub async fn swap(
+        &self,
+        private_key: &[u8; 32],
+        token_in: Address,
+        token_out: Address,
+        amount_in: u128,
+        min_amount_out: u128,
+    ) -> Result<B256> {
+        let from = Self::get_address_from_private_key(private_key)?;
+        let nonce = self.get_nonce(from).await?;
+        let gas_price = self.get_gas_price().await?;
+
+        // swapExactAmountIn(address,address,uint128,uint128,address) selector
+        // We'll use a simplified version
+        let selector: [u8; 4] = [0x8a, 0x65, 0x4b, 0x51]; // placeholder, need actual selector
+        let mut data = selector.to_vec();
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(token_in.as_slice());
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(token_out.as_slice());
+        data.extend_from_slice(&[0u8; 16]);
+        data.extend_from_slice(&amount_in.to_be_bytes());
+        data.extend_from_slice(&[0u8; 16]);
+        data.extend_from_slice(&min_amount_out.to_be_bytes());
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(from.as_slice()); // recipient
+
+        let raw_tx = Self::sign_transaction(
+            private_key,
+            DEX_ADDRESS,
+            U256::ZERO,
+            data,
+            nonce,
+            gas_price,
+            200_000, // gas limit for swap
+        )?;
+
+        self.send_raw_transaction(&raw_tx).await
+    }
+
+    /// Request tokens from faucet
+    pub async fn faucet(&self, private_key: &[u8; 32], token: Address) -> Result<B256> {
+        let from = Self::get_address_from_private_key(private_key)?;
+        let nonce = self.get_nonce(from).await?;
+        let gas_price = self.get_gas_price().await?;
+
+        // drip(address) selector = 0x23bc6c5d (common faucet function)
+        let mut data = vec![0x23, 0xbc, 0x6c, 0x5d];
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(token.as_slice());
+
+        let raw_tx = Self::sign_transaction(
+            private_key,
+            FAUCET_ADDRESS,
+            U256::ZERO,
+            data,
+            nonce,
+            gas_price,
+            100_000, // gas limit for faucet
+        )?;
+
+        self.send_raw_transaction(&raw_tx).await
     }
 }

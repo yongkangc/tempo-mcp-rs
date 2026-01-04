@@ -40,9 +40,57 @@ pub struct GetDexQuoteInput {
     pub direction: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct TransferInput {
+    /// Private key (hex, with or without 0x prefix)
+    pub private_key: String,
+    /// Recipient address
+    pub to: String,
+    /// Amount to transfer (human-readable, e.g., "100")
+    pub amount: String,
+    /// Token symbol (TUSD, TEUR, TGBP) or address. Defaults to TUSD
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SwapInput {
+    /// Private key (hex, with or without 0x prefix)
+    pub private_key: String,
+    /// Token to sell (symbol or address)
+    pub token_in: String,
+    /// Token to buy (symbol or address)
+    pub token_out: String,
+    /// Amount to sell (human-readable, e.g., "100")
+    pub amount_in: String,
+    /// Minimum amount to receive (human-readable). Defaults to 0 (no slippage protection)
+    #[serde(default)]
+    pub min_amount_out: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct FaucetInput {
+    /// Private key (hex, with or without 0x prefix)
+    pub private_key: String,
+    /// Token symbol (TUSD, TEUR, TGBP) or address. Defaults to TUSD
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
 // ============================================================================
 // Tool Implementations
 // ============================================================================
+
+fn parse_private_key(key: &str) -> Result<[u8; 32]> {
+    let key = key.trim_start_matches("0x");
+    let bytes = hex::decode(key)?;
+    if bytes.len() != 32 {
+        anyhow::bail!("Private key must be 32 bytes");
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&bytes);
+    Ok(arr)
+}
 
 fn resolve_token(token: Option<&str>) -> Result<TokenInfo> {
     let token_str = token.unwrap_or("TUSD");
@@ -276,4 +324,81 @@ pub fn list_tokens() -> String {
     ));
 
     result
+}
+
+// ============================================================================
+// Write Tool Implementations
+// ============================================================================
+
+pub async fn transfer(client: &TempoClient, input: TransferInput) -> Result<String> {
+    let private_key = parse_private_key(&input.private_key)?;
+    let to: Address = input.to.parse()?;
+    let token_info = resolve_token(input.token.as_deref())?;
+    let amount = parse_token_amount(&input.amount, token_info.decimals)?;
+
+    let from = TempoClient::get_address_from_private_key(&private_key)?;
+    let tx_hash = client
+        .transfer(&private_key, token_info.address, to, amount)
+        .await?;
+
+    Ok(format!(
+        "Transfer submitted!\n\
+         From: {:?}\n\
+         To: {:?}\n\
+         Amount: {} {}\n\
+         Transaction: {:?}\n\
+         Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
+        from, to, input.amount, token_info.symbol, tx_hash, tx_hash
+    ))
+}
+
+pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
+    let private_key = parse_private_key(&input.private_key)?;
+    let token_in_info = resolve_token(Some(&input.token_in))?;
+    let token_out_info = resolve_token(Some(&input.token_out))?;
+    let amount_in = parse_token_amount(&input.amount_in, token_in_info.decimals)?;
+    let min_out = input
+        .min_amount_out
+        .as_ref()
+        .map(|s| parse_token_amount(s, token_out_info.decimals))
+        .transpose()?
+        .unwrap_or(U256::ZERO);
+
+    let from = TempoClient::get_address_from_private_key(&private_key)?;
+    let tx_hash = client
+        .swap(
+            &private_key,
+            token_in_info.address,
+            token_out_info.address,
+            amount_in.try_into()?,
+            min_out.try_into()?,
+        )
+        .await?;
+
+    Ok(format!(
+        "Swap submitted!\n\
+         From: {:?}\n\
+         Selling: {} {}\n\
+         Buying: {}\n\
+         Transaction: {:?}\n\
+         Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
+        from, input.amount_in, token_in_info.symbol, token_out_info.symbol, tx_hash, tx_hash
+    ))
+}
+
+pub async fn faucet(client: &TempoClient, input: FaucetInput) -> Result<String> {
+    let private_key = parse_private_key(&input.private_key)?;
+    let token_info = resolve_token(input.token.as_deref())?;
+
+    let from = TempoClient::get_address_from_private_key(&private_key)?;
+    let tx_hash = client.faucet(&private_key, token_info.address).await?;
+
+    Ok(format!(
+        "Faucet request submitted!\n\
+         Address: {:?}\n\
+         Token: {}\n\
+         Transaction: {:?}\n\
+         Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
+        from, token_info.symbol, tx_hash, tx_hash
+    ))
 }

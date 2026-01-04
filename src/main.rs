@@ -106,6 +106,86 @@ impl TempoService {
         let result = list_tokens();
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
+
+    #[tool(description = "Transfer TIP-20 tokens to another address on Tempo blockchain")]
+    async fn tempo_transfer(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "Private key (hex, with or without 0x prefix)")]
+        private_key: String,
+        #[tool(param)]
+        #[schemars(description = "Recipient address")]
+        to: String,
+        #[tool(param)]
+        #[schemars(description = "Amount to transfer (human-readable, e.g., '100')")]
+        amount: String,
+        #[tool(param)]
+        #[schemars(description = "Token symbol (TUSD, TEUR, TGBP) or address. Defaults to TUSD")]
+        token: Option<String>,
+    ) -> Result<CallToolResult, rmcp::Error> {
+        let client = get_client().await;
+        let input = TransferInput {
+            private_key,
+            to,
+            amount,
+            token,
+        };
+        match transfer(client, input).await {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+        }
+    }
+
+    #[tool(description = "Swap tokens on Tempo DEX")]
+    async fn tempo_swap(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "Private key (hex, with or without 0x prefix)")]
+        private_key: String,
+        #[tool(param)]
+        #[schemars(description = "Token to sell (symbol or address)")]
+        token_in: String,
+        #[tool(param)]
+        #[schemars(description = "Token to buy (symbol or address)")]
+        token_out: String,
+        #[tool(param)]
+        #[schemars(description = "Amount to sell (human-readable, e.g., '100')")]
+        amount_in: String,
+        #[tool(param)]
+        #[schemars(description = "Minimum amount to receive (human-readable). Defaults to 0")]
+        min_amount_out: Option<String>,
+    ) -> Result<CallToolResult, rmcp::Error> {
+        let client = get_client().await;
+        let input = SwapInput {
+            private_key,
+            token_in,
+            token_out,
+            amount_in,
+            min_amount_out,
+        };
+        match swap(client, input).await {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+        }
+    }
+
+    #[tool(description = "Request tokens from Tempo testnet faucet")]
+    async fn tempo_faucet(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "Private key (hex, with or without 0x prefix)")]
+        private_key: String,
+        #[tool(param)]
+        #[schemars(description = "Token symbol (TUSD, TEUR, TGBP) or address. Defaults to TUSD")]
+        token: Option<String>,
+    ) -> Result<CallToolResult, rmcp::Error> {
+        let client = get_client().await;
+        let input = FaucetInput { private_key, token };
+        match faucet(client, input).await {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+        }
+    }
 }
 
 #[tool(tool_box)]

@@ -16,8 +16,10 @@ rmcp = { version = "0.1", features = ["server", "transport-io"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# Ethereum primitives only (no provider)
-alloy-primitives = { version = "0.8", features = ["serde"] }
+# Ethereum primitives and signing
+alloy-primitives = { version = "0.8", features = ["serde", "k256", "rlp"] }
+alloy-rlp = { version = "0.3", features = ["derive"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
 
 # HTTP client
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
