@@ -5,9 +5,10 @@ build:
   dockerBuildPath: .
 
 startCommand:
-  type: stdio
+  type: http
   configSchema:
     type: object
     properties: {}
   commandFunction: |-
-    (config) => ({ command: 'tempo-mcp', args: [] })
+    (config) => ({ command: 'sh', args: ['-c', 'mcp-proxy --port $PORT -- tempo-mcp'], env: { PORT: '8000' } })
+  port: 8000
