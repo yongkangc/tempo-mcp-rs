@@ -402,3 +402,80 @@ pub async fn faucet(client: &TempoClient, input: FaucetInput) -> Result<String> 
         from, token_info.symbol, tx_hash, tx_hash
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_private_key_with_prefix() {
+        let key = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let result = parse_private_key(key);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()[0], 0x01);
+    }
+
+    #[test]
+    fn test_parse_private_key_without_prefix() {
+        let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let result = parse_private_key(key);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_private_key_invalid_length() {
+        let key = "0123456789abcdef"; // too short
+        let result = parse_private_key(key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_token_by_symbol() {
+        let result = resolve_token(Some("TUSD"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().symbol, "TUSD");
+    }
+
+    #[test]
+    fn test_resolve_token_case_insensitive() {
+        let result = resolve_token(Some("tusd"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().symbol, "TUSD");
+    }
+
+    #[test]
+    fn test_resolve_token_default() {
+        let result = resolve_token(None);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().symbol, "TUSD");
+    }
+
+    #[test]
+    fn test_resolve_token_by_address() {
+        let result = resolve_token(Some("0x20C0000000000000000000000000000000000000"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().symbol, "TUSD");
+    }
+
+    #[test]
+    fn test_resolve_token_unknown_address() {
+        let result = resolve_token(Some("0x1234567890123456789012345678901234567890"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().symbol, "UNKNOWN");
+    }
+
+    #[test]
+    fn test_resolve_token_invalid() {
+        let result = resolve_token(Some("INVALID_TOKEN"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_list_tokens() {
+        let result = list_tokens();
+        assert!(result.contains("TUSD"));
+        assert!(result.contains("TEUR"));
+        assert!(result.contains("TGBP"));
+        assert!(result.contains("Tempo Testnet"));
+    }
+}

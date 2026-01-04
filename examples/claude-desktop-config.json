@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "/path/to/tempo-mcp-rs/target/release/tempo-mcp",
+      "args": []
+    }
+  }
+}

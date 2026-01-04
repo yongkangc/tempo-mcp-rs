@@ -534,3 +534,136 @@ impl TempoClient {
         self.send_raw_transaction(&raw_tx).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_known_tokens() {
+        let tokens = known_tokens();
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[0].symbol, "TUSD");
+        assert_eq!(tokens[1].symbol, "TEUR");
+        assert_eq!(tokens[2].symbol, "TGBP");
+    }
+
+    #[test]
+    fn test_get_token_by_symbol() {
+        assert!(get_token_by_symbol("TUSD").is_some());
+        assert!(get_token_by_symbol("tusd").is_some()); // case insensitive
+        assert!(get_token_by_symbol("TEUR").is_some());
+        assert!(get_token_by_symbol("UNKNOWN").is_none());
+    }
+
+    #[test]
+    fn test_get_token_by_address() {
+        assert!(get_token_by_address(TUSD_ADDRESS).is_some());
+        assert!(get_token_by_address(TEUR_ADDRESS).is_some());
+        assert!(get_token_by_address(TGBP_ADDRESS).is_some());
+        assert!(get_token_by_address(Address::ZERO).is_none());
+    }
+
+    #[test]
+    fn test_format_token_amount_whole() {
+        let amount = U256::from(1_000_000u64); // 1.0 with 6 decimals
+        assert_eq!(format_token_amount(amount, 6), "1");
+    }
+
+    #[test]
+    fn test_format_token_amount_fractional() {
+        let amount = U256::from(1_500_000u64); // 1.5 with 6 decimals
+        assert_eq!(format_token_amount(amount, 6), "1.5");
+    }
+
+    #[test]
+    fn test_format_token_amount_small() {
+        let amount = U256::from(100u64); // 0.0001 with 6 decimals
+        assert_eq!(format_token_amount(amount, 6), "0.0001");
+    }
+
+    #[test]
+    fn test_parse_token_amount_whole() {
+        let result = parse_token_amount("100", 6).unwrap();
+        assert_eq!(result, U256::from(100_000_000u64));
+    }
+
+    #[test]
+    fn test_parse_token_amount_decimal() {
+        let result = parse_token_amount("1.5", 6).unwrap();
+        assert_eq!(result, U256::from(1_500_000u64));
+    }
+
+    #[test]
+    fn test_parse_token_amount_small() {
+        let result = parse_token_amount("0.001", 6).unwrap();
+        assert_eq!(result, U256::from(1_000u64));
+    }
+
+    #[test]
+    fn test_roundtrip_amount() {
+        let original = "123.456789";
+        let parsed = parse_token_amount(original, 6).unwrap();
+        let formatted = format_token_amount(parsed, 6);
+        // Note: may lose precision beyond 6 decimals
+        assert_eq!(formatted, "123.456789");
+    }
+
+    #[test]
+    fn test_get_address_from_private_key() {
+        // Well-known test private key
+        let private_key: [u8; 32] = [
+            0xac, 0x09, 0x74, 0xbe, 0xc3, 0x9a, 0x17, 0xe3, 0x6b, 0xa4, 0xa6, 0xb4, 0xd2, 0x38,
+            0xff, 0x94, 0x4b, 0xac, 0xb4, 0x78, 0xcb, 0xed, 0x5e, 0xfc, 0xae, 0x78, 0x4d, 0x7b,
+            0xf4, 0xf2, 0xff, 0x80,
+        ];
+        let address = TempoClient::get_address_from_private_key(&private_key).unwrap();
+        // Address should be derived correctly (not checking exact value)
+        assert!(!address.is_zero());
+    }
+
+    #[test]
+    fn test_sign_transaction() {
+        let private_key: [u8; 32] = [1u8; 32]; // Simple test key
+        let to = Address::ZERO;
+        let value = U256::from(100u64);
+        let data = vec![];
+        let nonce = 0;
+        let gas_price = U256::from(1_000_000_000u64);
+        let gas_limit = 21000;
+
+        let result = TempoClient::sign_transaction(
+            &private_key,
+            to,
+            value,
+            data,
+            nonce,
+            gas_price,
+            gas_limit,
+        );
+        assert!(result.is_ok());
+        let signed_tx = result.unwrap();
+        assert!(!signed_tx.is_empty());
+    }
+
+    // Integration tests (require network, run with --ignored)
+    #[tokio::test]
+    #[ignore]
+    async fn test_get_balance_live() {
+        let client = TempoClient::new();
+        let address: Address = "0x0000000000000000000000000000000000000001"
+            .parse()
+            .unwrap();
+        let result = client.get_balance(address, TUSD_ADDRESS).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_get_gas_price_live() {
+        let client = TempoClient::new();
+        let result = client.get_gas_price().await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap().is_zero());
+    }
+}
