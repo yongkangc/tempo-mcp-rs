@@ -42,8 +42,9 @@ pub struct GetDexQuoteInput {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct TransferInput {
-    /// Private key (hex, with or without 0x prefix)
-    pub private_key: String,
+    /// Private key (hex). Optional if TEMPO_PRIVATE_KEY env var is set
+    #[serde(default)]
+    pub private_key: Option<String>,
     /// Recipient address
     pub to: String,
     /// Amount to transfer (human-readable, e.g., "100")
@@ -55,8 +56,9 @@ pub struct TransferInput {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SwapInput {
-    /// Private key (hex, with or without 0x prefix)
-    pub private_key: String,
+    /// Private key (hex). Optional if TEMPO_PRIVATE_KEY env var is set
+    #[serde(default)]
+    pub private_key: Option<String>,
     /// Token to sell (symbol or address)
     pub token_in: String,
     /// Token to buy (symbol or address)
@@ -70,8 +72,9 @@ pub struct SwapInput {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FaucetInput {
-    /// Private key (hex, with or without 0x prefix)
-    pub private_key: String,
+    /// Private key (hex). Optional if TEMPO_PRIVATE_KEY env var is set
+    #[serde(default)]
+    pub private_key: Option<String>,
     /// Token symbol (TUSD, TEUR, TGBP) or address. Defaults to TUSD
     #[serde(default)]
     pub token: Option<String>,
@@ -90,6 +93,18 @@ fn parse_private_key(key: &str) -> Result<[u8; 32]> {
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
     Ok(arr)
+}
+
+/// Get private key from parameter or TEMPO_PRIVATE_KEY environment variable
+fn get_private_key(param: Option<String>) -> Result<[u8; 32]> {
+    let key = param
+        .or_else(|| std::env::var("TEMPO_PRIVATE_KEY").ok())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Private key required: pass as parameter or set TEMPO_PRIVATE_KEY env var"
+            )
+        })?;
+    parse_private_key(&key)
 }
 
 fn resolve_token(token: Option<&str>) -> Result<TokenInfo> {
@@ -331,7 +346,7 @@ pub fn list_tokens() -> String {
 // ============================================================================
 
 pub async fn transfer(client: &TempoClient, input: TransferInput) -> Result<String> {
-    let private_key = parse_private_key(&input.private_key)?;
+    let private_key = get_private_key(input.private_key)?;
     let to: Address = input.to.parse()?;
     let token_info = resolve_token(input.token.as_deref())?;
     let amount = parse_token_amount(&input.amount, token_info.decimals)?;
@@ -353,7 +368,7 @@ pub async fn transfer(client: &TempoClient, input: TransferInput) -> Result<Stri
 }
 
 pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
-    let private_key = parse_private_key(&input.private_key)?;
+    let private_key = get_private_key(input.private_key)?;
     let token_in_info = resolve_token(Some(&input.token_in))?;
     let token_out_info = resolve_token(Some(&input.token_out))?;
     let amount_in = parse_token_amount(&input.amount_in, token_in_info.decimals)?;
@@ -387,7 +402,7 @@ pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
 }
 
 pub async fn faucet(client: &TempoClient, input: FaucetInput) -> Result<String> {
-    let private_key = parse_private_key(&input.private_key)?;
+    let private_key = get_private_key(input.private_key)?;
     let token_info = resolve_token(input.token.as_deref())?;
 
     let from = TempoClient::get_address_from_private_key(&private_key)?;
@@ -477,5 +492,50 @@ mod tests {
         assert!(result.contains("TEUR"));
         assert!(result.contains("TGBP"));
         assert!(result.contains("Tempo Testnet"));
+    }
+
+    #[test]
+    fn test_get_private_key_from_param() {
+        let key = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let result = get_private_key(Some(key.to_string()));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()[0], 0x01);
+    }
+
+    #[test]
+    fn test_get_private_key_from_env() {
+        std::env::set_var(
+            "TEMPO_PRIVATE_KEY",
+            "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        );
+        let result = get_private_key(None);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap()[0], 0xab);
+        std::env::remove_var("TEMPO_PRIVATE_KEY");
+    }
+
+    #[test]
+    fn test_get_private_key_param_overrides_env() {
+        std::env::set_var(
+            "TEMPO_PRIVATE_KEY",
+            "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        );
+        let key = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let result = get_private_key(Some(key.to_string()));
+        assert!(result.is_ok());
+        // Param should take precedence
+        assert_eq!(result.unwrap()[0], 0x01);
+        std::env::remove_var("TEMPO_PRIVATE_KEY");
+    }
+
+    #[test]
+    fn test_get_private_key_neither_set() {
+        std::env::remove_var("TEMPO_PRIVATE_KEY");
+        let result = get_private_key(None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("TEMPO_PRIVATE_KEY"));
     }
 }

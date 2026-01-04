@@ -151,6 +151,56 @@ cargo build --release
 | `tempo_swap` | Swap tokens on DEX |
 | `tempo_faucet` | Request testnet tokens |
 
+## Security: Private Key Configuration
+
+For transaction tools (`tempo_transfer`, `tempo_swap`, `tempo_faucet`), configure your private key via environment variable instead of passing it in tool calls. This prevents keys from appearing in MCP transcripts.
+
+**Claude Desktop / VS Code / Cursor:**
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp",
+      "env": {
+        "TEMPO_PRIVATE_KEY": "0x..."
+      }
+    }
+  }
+}
+```
+
+**Codex:**
+
+```toml
+[mcp_servers.tempo]
+command = "tempo-mcp"
+
+[mcp_servers.tempo.env]
+TEMPO_PRIVATE_KEY = "0x..."
+```
+
+**Amp:**
+
+```json
+{
+  "amp.mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp",
+      "env": {
+        "TEMPO_PRIVATE_KEY": "0x..."
+      }
+    }
+  }
+}
+```
+
+Once configured, transaction tools work without passing the key:
+```
+You: Send 50 TUSD to 0xabcd...
+Claude: Transfer submitted! Tx: 0x...
+```
+
 ## Example Prompts
 
 <details>

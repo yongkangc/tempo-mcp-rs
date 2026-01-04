@@ -108,8 +108,10 @@ impl TempoService {
     async fn tempo_transfer(
         &self,
         #[tool(param)]
-        #[schemars(description = "Private key (hex, with or without 0x prefix)")]
-        private_key: String,
+        #[schemars(
+            description = "Private key (hex). Optional if TEMPO_PRIVATE_KEY env var is set"
+        )]
+        private_key: Option<String>,
         #[tool(param)]
         #[schemars(description = "Recipient address")]
         to: String,
@@ -134,8 +136,10 @@ impl TempoService {
     async fn tempo_swap(
         &self,
         #[tool(param)]
-        #[schemars(description = "Private key (hex, with or without 0x prefix)")]
-        private_key: String,
+        #[schemars(
+            description = "Private key (hex). Optional if TEMPO_PRIVATE_KEY env var is set"
+        )]
+        private_key: Option<String>,
         #[tool(param)]
         #[schemars(description = "Token to sell (symbol or address)")]
         token_in: String,
@@ -164,8 +168,10 @@ impl TempoService {
     async fn tempo_faucet(
         &self,
         #[tool(param)]
-        #[schemars(description = "Private key (hex, with or without 0x prefix)")]
-        private_key: String,
+        #[schemars(
+            description = "Private key (hex). Optional if TEMPO_PRIVATE_KEY env var is set"
+        )]
+        private_key: Option<String>,
         #[tool(param)]
         #[schemars(description = "Token symbol (TUSD, TEUR, TGBP) or address. Defaults to TUSD")]
         token: Option<String>,
