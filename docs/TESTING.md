@@ -8,46 +8,55 @@ This document outlines the testing strategy for the Tempo MCP server.
 
 ### 1. Unit Tests
 
-Test individual functions in isolation (22 tests):
+Test individual functions in isolation (28 tests):
 
 | Module | Function | Test Cases |
 |--------|----------|------------|
 | `tools` | `resolve_token()` | Valid symbols, addresses, unknown tokens |
 | `tools` | `parse_private_key()` | With/without 0x prefix, invalid lengths |
-| `tempo` | `parse_token_amount()` | Integer, decimal, edge cases |
+| `tempo` | `parse_token_amount()` | Integer, decimal, empty, invalid, multiple dots |
 | `tempo` | `format_token_amount()` | Various decimal places |
 | `tempo` | `get_token_by_*()` | Symbol lookup, address lookup |
 | `tempo` | `sign_transaction()` | Transaction signing |
 
 ### 2. Integration Tests
 
-Test MCP protocol compliance:
+Test MCP protocol compliance (4 tests):
 
 | Test | Description |
 |------|-------------|
-| Server initialization | Verify `initialize` response format |
-| Tool listing | Verify `tools/list` returns all 8 tools |
-| Tool schemas | Verify JSON schemas are valid |
-| Tool execution | Test each tool with mock/real RPC |
+| `test_mcp_initialize` | Verify `initialize` response format |
+| `test_mcp_list_tools` | Verify `tools/list` returns all 8 tools |
+| `test_mcp_tool_list_tokens` | Verify `tempo_list_tokens` tool execution |
+| `test_mcp_tool_get_balance` | Verify `tempo_get_balance` with live RPC |
 
-### 3. E2E Tests with Claude
+### 3. Live RPC Tests
 
-Test the full loop: Claude → MCP → Tempo → Response
+Test actual blockchain connectivity (2 tests):
+
+| Test | Description |
+|------|-------------|
+| `test_get_balance_live` | Query balance from Tempo testnet |
+| `test_get_gas_price_live` | Query gas price from Tempo testnet |
+
+### 4. E2E Tests with Claude
+
+Test the full loop: Claude -> MCP -> Tempo -> Response
 
 ## Test Implementation
 
 ### Unit Tests Location
 ```
 src/
-├── tempo.rs      # #[cfg(test)] mod tests (14 tests)
+├── tempo.rs      # #[cfg(test)] mod tests (17 tests)
 └── tools/
-    └── mod.rs    # #[cfg(test)] mod tests (8 tests)
+    └── mod.rs    # #[cfg(test)] mod tests (11 tests)
 ```
 
 ### Integration Tests Location
 ```
 tests/
-└── mcp_protocol.rs   # MCP message format tests
+└── mcp_protocol.rs   # MCP message format tests (4 tests)
 ```
 
 ### Test Scripts
@@ -60,14 +69,17 @@ scripts/
 ## Running Tests
 
 ```bash
-# Unit tests (fast, no network required)
+# Unit tests only (fast, no network)
 cargo test
 
-# All tests including ignored
-cargo test -- --include-ignored
+# All tests including integration tests
+cargo test -- --ignored --test-threads=1
 
 # Integration tests only
-cargo test --test '*' -- --ignored
+cargo test --test mcp_protocol -- --ignored --test-threads=1
+
+# Live RPC tests only
+cargo test test_live -- --ignored
 
 # With logging
 RUST_LOG=debug cargo test
@@ -83,7 +95,8 @@ python scripts/test-with-claude.py
 ## Mock vs Live Testing
 
 - **Unit tests**: No network required, fast
-- **Integration tests**: Can use live testnet (marked `#[ignore]`)
+- **Integration tests**: Spawn MCP server, test protocol compliance
+- **Live RPC tests**: Require Tempo testnet connectivity (marked `#[ignore]`)
 - **CI**: Run unit tests only, integration tests on demand
 
 ## Claude Desktop Integration
@@ -126,15 +139,11 @@ pip install anthropic
 export ANTHROPIC_API_KEY=your_key
 ```
 
-## Test Priorities
+## Coverage Summary
 
-1. **P0**: Token resolution, amount parsing (core logic) - done
-2. **P1**: MCP protocol compliance (server works) - done
-3. **P2**: Tool execution with mocks
-4. **P3**: Live testnet tests
-
-## Coverage
-
-- 22 unit tests
-- 4 integration tests (ignored by default)
-- 2 test scripts
+| Category | Count | Status |
+|----------|-------|--------|
+| Unit tests | 28 | All passing |
+| Integration tests | 4 | All passing |
+| Live RPC tests | 2 | All passing |
+| Test scripts | 2 | Available |
