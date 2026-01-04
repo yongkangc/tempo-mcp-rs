@@ -1,0 +1,13 @@
+# Smithery configuration file: https://smithery.ai/docs/config
+
+build:
+  dockerfile: Dockerfile
+  dockerBuildPath: .
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction: |-
+    (config) => ({ command: 'tempo-mcp', args: [] })

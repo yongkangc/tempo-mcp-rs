@@ -1,5 +1,7 @@
 # Usage
 
+[![smithery badge](https://smithery.ai/badge/tempo-mcp)](https://smithery.ai/server/tempo-mcp) [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=tempo&config=eyJjb21tYW5kIjoidGVtcG8tbWNwIn0=)
+
 Add the following config to your MCP client:
 
 ```json
@@ -81,6 +83,17 @@ code --add-mcp '{"name":"tempo","command":"/path/to/tempo-mcp-rs/target/release/
   <summary>Windsurf</summary>
 
 Follow the [configure MCP guide](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json) using the standard config from above.
+
+</details>
+
+<details>
+  <summary>Smithery</summary>
+
+Install via [Smithery](https://smithery.ai/server/tempo-mcp) using the Smithery CLI:
+
+```bash
+npx -y @smithery/cli install tempo-mcp --client claude
+```
 
 </details>
 
