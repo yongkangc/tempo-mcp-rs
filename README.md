@@ -31,6 +31,10 @@ claude mcp add tempo tempo-mcp
 <details>
 <summary>Other MCP Clients</summary>
 
+### Smithery
+
+[![Install MCP Server](https://smithery.ai/badge/@yongkangc/tempo-mcp-rs)](https://smithery.ai/server/@yongkangc/tempo-mcp-rs)
+
 ### Claude Desktop
 
 Add to `claude_desktop_config.json`:
