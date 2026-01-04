@@ -1,14 +1,10 @@
 # Smithery configuration file: https://smithery.ai/docs/config
 
+runtime: "container"
+
 build:
   dockerfile: Dockerfile
   dockerBuildPath: .
 
 startCommand:
   type: http
-  configSchema:
-    type: object
-    properties: {}
-  commandFunction: |-
-    (config) => ({ command: 'sh', args: ['-c', 'rmcp-proxy --host 0.0.0.0 --port=$PORT -- tempo-mcp'], env: { PORT: '8000' } })
-  port: 8000
