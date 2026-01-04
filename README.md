@@ -1,14 +1,20 @@
-# tempo-mcp-rs
+# tempo-mcp
 
+[![Crates.io](https://img.shields.io/crates/v/tempo-mcp.svg)](https://crates.io/crates/tempo-mcp)
 [![smithery badge](https://smithery.ai/badge/@yongkangc/tempo-mcp-rs)](https://smithery.ai/server/@yongkangc/tempo-mcp-rs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-MCP server for Tempo blockchain - enabling AI agents to read and write onchain data.
+MCP server for Tempo blockchain - query balances, swap tokens, and interact with onchain data through AI assistants.
 
-## Features
+## Quick Example
 
-- **Read Operations**: Query balances, transactions, DEX quotes
-- **Write Operations**: Transfer tokens, swap on DEX, request from faucet
-- **MCP Protocol**: Compatible with Claude Desktop and other MCP clients
+```
+You: What's my TUSD balance at 0x1234...?
+Claude: Your balance is 1,000.50 TUSD
+
+You: Swap 100 TUSD for TEUR
+Claude: Swap submitted! Tx: 0xabc... (link to explorer)
+```
 
 ## Installation
 
@@ -16,13 +22,38 @@ MCP server for Tempo blockchain - enabling AI agents to read and write onchain d
 cargo install tempo-mcp
 ```
 
-Then add to your MCP client:
+Add to Claude Code:
 
 ```bash
 claude mcp add tempo tempo-mcp
 ```
 
-Or build from source:
+<details>
+<summary>Other MCP Clients</summary>
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to Cursor MCP settings with the same config above.
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json` with the same config.
+
+### Build from Source
 
 ```bash
 git clone https://github.com/yongkangc/tempo-mcp-rs.git
@@ -30,71 +61,9 @@ cd tempo-mcp-rs
 cargo build --release
 ```
 
-## MCP Client Configuration
-
-### Claude Desktop
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "tempo": {
-      "command": "tempo-mcp"
-    }
-  }
-}
-```
-
-Or if built from source:
-
-```json
-{
-  "mcpServers": {
-    "tempo": {
-      "command": "/path/to/tempo-mcp-rs/target/release/tempo-mcp"
-    }
-  }
-}
-```
-
-### Claude Code CLI
-
-```bash
-claude mcp add tempo tempo-mcp
-```
-
-### Cursor
-
-Add to your Cursor MCP settings:
-
-```json
-{
-  "mcpServers": {
-    "tempo": {
-      "command": "tempo-mcp"
-    }
-  }
-}
-```
-
-### Windsurf
-
-Add to your `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "tempo": {
-      "command": "tempo-mcp"
-    }
-  }
-}
-```
+</details>
 
 ## Tools
-
-### Read Tools
 
 | Tool | Description |
 |------|-------------|
@@ -102,115 +71,48 @@ Add to your `~/.codeium/windsurf/mcp_config.json`:
 | `tempo_get_transaction` | Get transaction details by hash |
 | `tempo_decode_transaction` | Decode and explain a transaction |
 | `tempo_get_dex_quote` | Get swap quote from DEX |
-| `tempo_list_tokens` | List known tokens on Tempo |
-
-### Write Tools
-
-| Tool | Description |
-|------|-------------|
-| `tempo_transfer` | Transfer TIP-20 tokens |
+| `tempo_list_tokens` | List available tokens |
+| `tempo_transfer` | Transfer tokens to an address |
 | `tempo_swap` | Swap tokens on DEX |
 | `tempo_faucet` | Request testnet tokens |
 
-## Examples
+## Usage
 
-See [docs/USAGE.md](docs/USAGE.md) for MCP client setup instructions.
+**Check balance:**
+> "What's the TUSD balance for 0x1234...?"
 
-### Check Balance
+**Get a quote:**
+> "How much TEUR would I get for 100 TUSD?"
 
-```
-User: What's the TUSD balance for 0x1234...?
+**Transfer tokens:**
+> "Send 50 TUSD to 0xabcd..."
 
-Claude calls: tempo_get_balance
-Arguments: { "address": "0x1234...", "token": "TUSD" }
+**Swap tokens:**
+> "Swap 100 TUSD for TEUR"
 
-Response: Balance for 0x1234...: 1000.5 TUSD
-```
-
-### Get DEX Quote
-
-```
-User: How much TEUR would I get for 100 TUSD?
-
-Claude calls: tempo_get_dex_quote
-Arguments: { "token_in": "TUSD", "token_out": "TEUR", "amount": "100" }
-
-Response: Sell Quote: Selling 100 TUSD will get you 92.5 TEUR
-```
-
-### Transfer Tokens
-
-```
-User: Send 50 TUSD to 0xabcd...
-
-Claude calls: tempo_transfer
-Arguments: {
-  "private_key": "0x...",
-  "to": "0xabcd...",
-  "amount": "50",
-  "token": "TUSD"
-}
-
-Response: Transfer submitted!
-From: 0x1234...
-To: 0xabcd...
-Amount: 50 TUSD
-Transaction: 0x...
-Explorer: https://explorer.testnet.tempo.xyz/tx/0x...
-```
-
-### Swap Tokens
-
-```
-User: Swap 100 TUSD for TEUR
-
-Claude calls: tempo_swap
-Arguments: {
-  "private_key": "0x...",
-  "token_in": "TUSD",
-  "token_out": "TEUR",
-  "amount_in": "100"
-}
-
-Response: Swap submitted!
-From: 0x1234...
-Selling: 100 TUSD
-Buying: TEUR
-Transaction: 0x...
-```
-
-## Supported Tokens
-
-| Symbol | Address | Decimals |
-|--------|---------|----------|
-| TUSD | 0x20C0000000000000000000000000000000000000 | 6 |
-| TEUR | 0x20C0000000000000000000000000000000000001 | 6 |
-| TGBP | 0x20C0000000000000000000000000000000000002 | 6 |
+**Request from faucet:**
+> "Get me some testnet TUSD"
 
 ## Network
 
-- **Network**: Tempo Testnet
-- **Chain ID**: 62320
-- **RPC**: https://rpc.testnet.tempo.xyz
-- **Explorer**: https://explorer.testnet.tempo.xyz
+| | |
+|---|---|
+| Network | Tempo Testnet |
+| Chain ID | 62320 |
+| RPC | https://rpc.testnet.tempo.xyz |
+| Explorer | https://explorer.testnet.tempo.xyz |
+
+## Supported Tokens
+
+| Symbol | Address |
+|--------|---------|
+| TUSD | `0x20C0...0000` |
+| TEUR | `0x20C0...0001` |
+| TGBP | `0x20C0...0002` |
 
 ## Development
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full development guide.
-
-```bash
-# Run tests
-cargo test
-
-# Format code
-cargo +nightly fmt
-
-# Lint
-cargo +nightly clippy
-
-# Build release
-cargo build --release
-```
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for build, test, and contribution instructions.
 
 ## License
 
