@@ -1,4 +1,6 @@
 # tempo-mcp
+<img width="567" height="199" alt="image" src="https://github.com/user-attachments/assets/a6bed97c-23b4-4ff0-b9ab-3a482d799395" />
+
 
 [![Crates.io](https://img.shields.io/crates/v/tempo-mcp.svg)](https://crates.io/crates/tempo-mcp)
 [![smithery badge](https://smithery.ai/badge/@yongkangc/tempo-mcp-rs)](https://smithery.ai/server/@yongkangc/tempo-mcp-rs)
