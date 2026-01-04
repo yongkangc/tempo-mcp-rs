@@ -24,14 +24,14 @@ Claude: Swap submitted! Tx: 0xabc... (link to explorer)
 cargo install tempo-mcp
 ```
 
-Add to Claude Code:
+<details>
+<summary>MCP Clients</summary>
+
+### Claude Code
 
 ```bash
 claude mcp add tempo tempo-mcp
 ```
-
-<details>
-<summary>Other MCP Clients</summary>
 
 ### Smithery
 
