@@ -157,6 +157,9 @@ cargo build --release
 
 For transaction tools (`tempo_transfer`, `tempo_swap`, `tempo_faucet`), configure your private key via environment variable instead of passing it in tool calls. This prevents keys from appearing in MCP transcripts.
 
+<details>
+<summary>Client configuration examples</summary>
+
 **Claude Desktop / VS Code / Cursor:**
 
 ```json
@@ -196,6 +199,8 @@ TEMPO_PRIVATE_KEY = "0x..."
   }
 }
 ```
+
+</details>
 
 Once configured, transaction tools work without passing the key:
 ```
