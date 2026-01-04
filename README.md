@@ -38,7 +38,7 @@ cargo build --release
 
 ## Examples
 
-See [usage.md](usage.md) for Claude Desktop setup instructions.
+See [docs/USAGE.md](docs/USAGE.md) for MCP client setup instructions.
 
 ### Check Balance
 
@@ -119,6 +119,8 @@ Transaction: 0x...
 - **Explorer**: https://explorer.testnet.tempo.xyz
 
 ## Development
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full development guide.
 
 ```bash
 # Run tests
