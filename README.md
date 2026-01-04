@@ -28,6 +28,68 @@ cd tempo-mcp-rs
 cargo build --release
 ```
 
+## MCP Client Configuration
+
+### Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
+Or if built from source:
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "/path/to/tempo-mcp-rs/target/release/tempo-mcp"
+    }
+  }
+}
+```
+
+### Claude Code CLI
+
+```bash
+claude mcp add tempo tempo-mcp
+```
+
+### Cursor
+
+Add to your Cursor MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to your `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "tempo": {
+      "command": "tempo-mcp"
+    }
+  }
+}
+```
+
 ## Tools
 
 ### Read Tools
