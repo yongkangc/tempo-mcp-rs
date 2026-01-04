@@ -252,7 +252,7 @@ Claude: Transfer submitted! Tx: 0x...
 | Network | Tempo Testnet |
 | Chain ID | 62320 |
 | RPC | https://rpc.testnet.tempo.xyz |
-| Explorer | https://explorer.testnet.tempo.xyz |
+| Explorer | https://explore.tempo.xyz |
 
 ## Supported Tokens
 

@@ -334,7 +334,7 @@ pub fn list_tokens() -> String {
     }
 
     result.push_str(&format!(
-        "Network: Tempo Testnet\nChain ID: {}\nExplorer: https://explorer.testnet.tempo.xyz",
+        "Network: Tempo Testnet\nChain ID: {}\nExplorer: https://explore.tempo.xyz",
         crate::tempo::TEMPO_TESTNET_CHAIN_ID
     ));
 
@@ -362,7 +362,7 @@ pub async fn transfer(client: &TempoClient, input: TransferInput) -> Result<Stri
          To: {:?}\n\
          Amount: {} {}\n\
          Transaction: {:?}\n\
-         Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
+         Explorer: https://explore.tempo.xyz/tx/{:?}",
         from, to, input.amount, token_info.symbol, tx_hash, tx_hash
     ))
 }
@@ -405,7 +405,7 @@ pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
          Buying: {}\n\
          Approval tx: {:?}\n\
          Swap tx: {:?}\n\
-         Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
+         Explorer: https://explore.tempo.xyz/tx/{:?}",
         from, input.amount_in, token_in_info.symbol, token_out_info.symbol, approve_hash, tx_hash, tx_hash
     ))
 }
@@ -422,7 +422,7 @@ pub async fn faucet(client: &TempoClient, input: FaucetInput) -> Result<String> 
          Address: {:?}\n\
          Token: {}\n\
          Transaction: {:?}\n\
-         Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
+         Explorer: https://explore.tempo.xyz/tx/{:?}",
         from, token_info.symbol, tx_hash, tx_hash
     ))
 }

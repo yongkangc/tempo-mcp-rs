@@ -143,7 +143,7 @@ tempo-mcp-rs/
 | Network | Tempo Testnet |
 | Chain ID | 62320 |
 | RPC URL | https://rpc.testnet.tempo.xyz |
-| Explorer | https://explorer.testnet.tempo.xyz |
+| Explorer | https://explore.tempo.xyz |
 
 ## Debugging
 
