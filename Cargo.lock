@@ -2239,6 +2239,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",
+ "bytes",
  "hex",
  "k256",
  "reqwest",

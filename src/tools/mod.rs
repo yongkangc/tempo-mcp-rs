@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::tempo::{
     format_token_amount, get_token_by_address, get_token_by_symbol, known_tokens,
-    parse_token_amount, TempoClient, TokenInfo,
+    parse_token_amount, TempoClient, TokenInfo, DEX_ADDRESS,
 };
 
 // ============================================================================
@@ -380,6 +380,14 @@ pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
         .unwrap_or(U256::ZERO);
 
     let from = TempoClient::get_address_from_private_key(&private_key)?;
+
+    // Approve DEX to spend input tokens (use max uint256 for unlimited approval)
+    let max_approval = U256::MAX;
+    let approve_hash = client
+        .approve(&private_key, token_in_info.address, DEX_ADDRESS, max_approval)
+        .await?;
+
+    // Execute the swap
     let tx_hash = client
         .swap(
             &private_key,
@@ -391,13 +399,14 @@ pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
         .await?;
 
     Ok(format!(
-        "Swap submitted!\n\
+        "Swap completed!\n\
          From: {:?}\n\
          Selling: {} {}\n\
          Buying: {}\n\
-         Transaction: {:?}\n\
+         Approval tx: {:?}\n\
+         Swap tx: {:?}\n\
          Explorer: https://explorer.testnet.tempo.xyz/tx/{:?}",
-        from, input.amount_in, token_in_info.symbol, token_out_info.symbol, tx_hash, tx_hash
+        from, input.amount_in, token_in_info.symbol, token_out_info.symbol, approve_hash, tx_hash, tx_hash
     ))
 }
 

@@ -40,3 +40,4 @@ anyhow = "1.0"
 
 # Utilities
 hex = "0.4"
+bytes = "1"

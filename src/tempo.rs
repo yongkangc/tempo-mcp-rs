@@ -1,12 +1,13 @@
 use alloy_primitives::{keccak256, Address, B256, U256};
 use alloy_rlp::{Encodable, RlpEncodable};
 use anyhow::Result;
+use bytes::Bytes;
 use k256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 pub const TEMPO_TESTNET_RPC: &str = "https://rpc.testnet.tempo.xyz";
-pub const TEMPO_TESTNET_CHAIN_ID: u64 = 62320;
+pub const TEMPO_TESTNET_CHAIN_ID: u64 = 42429;
 
 // Known token addresses on Tempo Testnet
 pub const TUSD_ADDRESS: Address = Address::new([
@@ -22,10 +23,10 @@ pub const TGBP_ADDRESS: Address = Address::new([
     0x00, 0x00, 0x00, 0x02,
 ]);
 
-// DEX contract address
+// DEX contract address (stablecoin exchange precompile)
 pub const DEX_ADDRESS: Address = Address::new([
-    0x20, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x01, 0x00,
+    0xde, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
 ]);
 
 // Faucet contract address
@@ -42,7 +43,7 @@ pub struct LegacyTxForSigning {
     pub gas_limit: u64,
     pub to: Address,
     pub value: U256,
-    pub data: Vec<u8>,
+    pub data: Bytes,
     pub chain_id: u64,
     pub zero1: u8,
     pub zero2: u8,
@@ -55,7 +56,7 @@ pub struct SignedLegacyTx {
     pub gas_limit: u64,
     pub to: Address,
     pub value: U256,
-    pub data: Vec<u8>,
+    pub data: Bytes,
     pub v: u64,
     pub r: U256,
     pub s: U256,
@@ -312,7 +313,7 @@ impl TempoClient {
         amount_in: u128,
     ) -> Result<u128> {
         // quoteSwapExactAmountIn(address,address,uint128) selector
-        let selector = "0x7d5f4c81";
+        let selector = "0xe7c98f1a";
         let data = format!(
             "{}000000000000000000000000{}000000000000000000000000{}{:064x}",
             selector,
@@ -342,7 +343,7 @@ impl TempoClient {
         amount_out: u128,
     ) -> Result<u128> {
         // quoteSwapExactAmountOut(address,address,uint128) selector
-        let selector = "0x30c5e5e7";
+        let selector = "0x1576fa0e";
         let data = format!(
             "{}000000000000000000000000{}000000000000000000000000{}{:064x}",
             selector,
@@ -401,6 +402,7 @@ impl TempoClient {
         gas_limit: u64,
     ) -> Result<Vec<u8>> {
         let signing_key = SigningKey::from_bytes(private_key.into())?;
+        let data = Bytes::from(data);
 
         let tx_for_signing = LegacyTxForSigning {
             nonce,
@@ -494,6 +496,24 @@ impl TempoClient {
             .await
     }
 
+    /// Approve spender to spend tokens
+    pub async fn approve(
+        &self,
+        private_key: &[u8; 32],
+        token: Address,
+        spender: Address,
+        amount: U256,
+    ) -> Result<B256> {
+        // approve(address,uint256) selector = 0x095ea7b3
+        let mut data = vec![0x09, 0x5e, 0xa7, 0xb3];
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(spender.as_slice());
+        data.extend_from_slice(&amount.to_be_bytes::<32>());
+
+        self.send_contract_call(private_key, token, data, 50_000)
+            .await
+    }
+
     /// Swap tokens on DEX
     pub async fn swap(
         &self,
@@ -503,10 +523,8 @@ impl TempoClient {
         amount_in: u128,
         min_amount_out: u128,
     ) -> Result<B256> {
-        let from = Self::get_address_from_private_key(private_key)?;
-
-        // swapExactAmountIn(address,address,uint128,uint128,address) selector
-        let selector: [u8; 4] = [0x8a, 0x65, 0x4b, 0x51];
+        // swapExactAmountIn(address,address,uint128,uint128) selector = 0xf8856c0f
+        let selector: [u8; 4] = [0xf8, 0x85, 0x6c, 0x0f];
         let mut data = selector.to_vec();
         data.extend_from_slice(&[0u8; 12]);
         data.extend_from_slice(token_in.as_slice());
@@ -516,8 +534,6 @@ impl TempoClient {
         data.extend_from_slice(&amount_in.to_be_bytes());
         data.extend_from_slice(&[0u8; 16]);
         data.extend_from_slice(&min_amount_out.to_be_bytes());
-        data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(from.as_slice()); // recipient
 
         self.send_contract_call(private_key, DEX_ADDRESS, data, 200_000)
             .await
@@ -686,5 +702,60 @@ mod tests {
         let result = client.get_gas_price().await;
         assert!(result.is_ok());
         assert!(!result.unwrap().is_zero());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_faucet_live() {
+        // Requires TEMPO_PRIVATE_KEY env var
+        let key_hex = std::env::var("TEMPO_PRIVATE_KEY").expect("TEMPO_PRIVATE_KEY not set");
+        let key_hex = key_hex.trim_start_matches("0x");
+        let key_bytes = hex::decode(key_hex).expect("Invalid hex");
+        let mut private_key = [0u8; 32];
+        private_key.copy_from_slice(&key_bytes);
+
+        let client = TempoClient::new();
+        let result = client.faucet(&private_key, TUSD_ADDRESS).await;
+        println!("Faucet result: {:?}", result);
+        assert!(result.is_ok(), "Faucet failed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_transaction_debug() {
+        // Debug transaction encoding
+        let key_hex = std::env::var("TEMPO_PRIVATE_KEY").expect("TEMPO_PRIVATE_KEY not set");
+        let key_hex = key_hex.trim_start_matches("0x");
+        let key_bytes = hex::decode(key_hex).expect("Invalid hex");
+        let mut private_key = [0u8; 32];
+        private_key.copy_from_slice(&key_bytes);
+
+        let from = TempoClient::get_address_from_private_key(&private_key).unwrap();
+        println!("From address: {:?}", from);
+
+        let client = TempoClient::new();
+        let nonce = client.get_nonce(from).await.unwrap();
+        let gas_price = client.get_gas_price().await.unwrap();
+        println!("Nonce: {}", nonce);
+        println!("Gas price: {}", gas_price);
+
+        // drip(address) for TUSD
+        let mut data = vec![0x23, 0xbc, 0x6c, 0x5d];
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(TUSD_ADDRESS.as_slice());
+        println!("Call data: 0x{}", hex::encode(&data));
+
+        let raw_tx = TempoClient::sign_transaction(
+            &private_key,
+            FAUCET_ADDRESS,
+            U256::ZERO,
+            data,
+            nonce,
+            gas_price,
+            100_000,
+        )
+        .unwrap();
+        println!("Raw tx: 0x{}", hex::encode(&raw_tx));
+        println!("Raw tx length: {}", raw_tx.len());
     }
 }
