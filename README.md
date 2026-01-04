@@ -8,6 +8,12 @@
 
 MCP server for Tempo blockchain - query balances, swap tokens, and interact with onchain data through AI assistants.
 
+## Demo
+
+https://github.com/user-attachments/assets/efea376f-1723-4095-acc2-ea72323e0425
+
+
+
 ## Quick Example
 
 ```
