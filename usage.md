@@ -58,7 +58,11 @@ codex mcp add tempo -- /path/to/tempo-mcp-rs/target/release/tempo-mcp
 <details>
   <summary>Cursor</summary>
 
-Go to `Cursor Settings` -> `MCP` -> `New MCP Server`. Use the config provided above.
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=tempo&config=eyJjb21tYW5kIjoidGVtcG8tbWNwIn0=)
+
+> Note: The button assumes `tempo-mcp` is in your PATH. After clicking, update the command path in Cursor settings if needed.
+
+Or manually: Go to `Cursor Settings` -> `MCP` -> `New MCP Server`. Use the config provided above.
 
 </details>
 
