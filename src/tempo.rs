@@ -1,13 +1,128 @@
 use alloy_primitives::{keccak256, Address, B256, U256};
 use alloy_rlp::{Encodable, RlpEncodable};
-use anyhow::Result;
 use bytes::Bytes;
 use k256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::OnceLock;
+use std::time::Duration;
+use thiserror::Error;
 
-pub const TEMPO_TESTNET_RPC: &str = "https://rpc.testnet.tempo.xyz";
-pub const TEMPO_TESTNET_CHAIN_ID: u64 = 42429;
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/// Errors that can occur when interacting with the Tempo blockchain
+#[derive(Debug, Error)]
+#[allow(dead_code)] // Some variants reserved for future use
+pub enum TempoError {
+    #[error("RPC error {code}: {message}")]
+    Rpc { code: i64, message: String },
+
+    #[error("HTTP request failed: {0}")]
+    Http(#[from] reqwest::Error),
+
+    #[error("Invalid address: {0}")]
+    InvalidAddress(String),
+
+    #[error("Invalid amount format: {0}")]
+    InvalidAmount(String),
+
+    #[error("Invalid private key: {0}")]
+    InvalidPrivateKey(String),
+
+    #[error("Invalid transaction hash: {0}")]
+    InvalidTxHash(String),
+
+    #[error("Transaction not found: {0}")]
+    TxNotFound(String),
+
+    #[error("Token not found: {0}")]
+    TokenNotFound(String),
+
+    #[error("Signing failed: {0}")]
+    SigningFailed(String),
+
+    #[error("Hex decode error: {0}")]
+    HexDecode(#[from] hex::FromHexError),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
+
+    #[error("{0}")]
+    Other(String),
+}
+
+// Implement From for common error types
+impl From<std::num::ParseIntError> for TempoError {
+    fn from(e: std::num::ParseIntError) -> Self {
+        TempoError::Parse(e.to_string())
+    }
+}
+
+impl From<alloy_primitives::ruint::ParseError> for TempoError {
+    fn from(e: alloy_primitives::ruint::ParseError) -> Self {
+        TempoError::Parse(e.to_string())
+    }
+}
+
+impl From<alloy_primitives::hex::FromHexError> for TempoError {
+    fn from(e: alloy_primitives::hex::FromHexError) -> Self {
+        TempoError::Parse(e.to_string())
+    }
+}
+
+impl From<k256::ecdsa::Error> for TempoError {
+    fn from(e: k256::ecdsa::Error) -> Self {
+        TempoError::SigningFailed(e.to_string())
+    }
+}
+
+/// Result type for Tempo operations
+pub type Result<T> = std::result::Result<T, TempoError>;
+
+/// Default RPC URL for Tempo testnet. Override with TEMPO_RPC_URL env var.
+pub const DEFAULT_RPC_URL: &str = "https://rpc.testnet.tempo.xyz";
+
+/// Default chain ID for Tempo testnet. Override with TEMPO_CHAIN_ID env var.
+pub const DEFAULT_CHAIN_ID: u64 = 42429;
+
+/// Default request timeout in seconds. Override with TEMPO_TIMEOUT env var.
+pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+/// Get the configured RPC URL (cached after first call)
+#[inline]
+pub fn rpc_url() -> &'static str {
+    static URL: OnceLock<String> = OnceLock::new();
+    URL.get_or_init(|| {
+        std::env::var("TEMPO_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
+    })
+}
+
+/// Get the configured chain ID (cached after first call)
+#[inline]
+pub fn chain_id() -> u64 {
+    static ID: OnceLock<u64> = OnceLock::new();
+    *ID.get_or_init(|| {
+        std::env::var("TEMPO_CHAIN_ID")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_CHAIN_ID)
+    })
+}
+
+/// Get the configured timeout duration (cached after first call)
+#[inline]
+fn timeout() -> Duration {
+    static TIMEOUT: OnceLock<Duration> = OnceLock::new();
+    *TIMEOUT.get_or_init(|| {
+        let secs = std::env::var("TEMPO_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_TIMEOUT_SECS);
+        Duration::from_secs(secs)
+    })
+}
 
 // Known token addresses on Tempo Testnet
 pub const TUSD_ADDRESS: Address = Address::new([
@@ -150,24 +265,26 @@ pub fn format_token_amount(amount: U256, decimals: u8) -> String {
 pub fn parse_token_amount(amount: &str, decimals: u8) -> Result<U256> {
     let amount = amount.trim();
     if amount.is_empty() {
-        anyhow::bail!("Amount cannot be empty");
+        return Err(TempoError::InvalidAmount("Amount cannot be empty".into()));
     }
 
     let parts: Vec<&str> = amount.split('.').collect();
     if parts.len() > 2 {
-        anyhow::bail!("Invalid amount format: multiple decimal points");
+        return Err(TempoError::InvalidAmount(
+            "Invalid amount format: multiple decimal points".into(),
+        ));
     }
 
     let whole: U256 = parts[0]
         .parse()
-        .map_err(|_| anyhow::anyhow!("Invalid whole number: '{}'", parts[0]))?;
+        .map_err(|_| TempoError::InvalidAmount(format!("Invalid whole number: '{}'", parts[0])))?;
 
     let frac = if parts.len() > 1 {
         let frac_str = format!("{:0<width$}", parts[1], width = decimals as usize);
         let frac_str = &frac_str[..decimals as usize];
-        frac_str
-            .parse()
-            .map_err(|_| anyhow::anyhow!("Invalid fractional part: '{}'", parts[1]))?
+        frac_str.parse().map_err(|_| {
+            TempoError::InvalidAmount(format!("Invalid fractional part: '{}'", parts[1]))
+        })?
     } else {
         U256::ZERO
     };
@@ -220,10 +337,75 @@ pub struct Log {
     pub data: String,
 }
 
+// ============================================================================
+// ABI Encoding Helpers
+// ============================================================================
+
+/// Function selectors for common operations
+mod selectors {
+    /// balanceOf(address) - 0x70a08231
+    pub const BALANCE_OF: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
+    /// transfer(address,uint256) - 0xa9059cbb
+    pub const TRANSFER: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];
+    /// approve(address,uint256) - 0x095ea7b3
+    pub const APPROVE: [u8; 4] = [0x09, 0x5e, 0xa7, 0xb3];
+    /// drip(address) - 0x23bc6c5d
+    pub const DRIP: [u8; 4] = [0x23, 0xbc, 0x6c, 0x5d];
+    /// swapExactAmountIn(address,address,uint128,uint128) - 0xf8856c0f
+    pub const SWAP_EXACT_IN: [u8; 4] = [0xf8, 0x85, 0x6c, 0x0f];
+    /// quoteSwapExactAmountIn(address,address,uint128) - 0xe7c98f1a
+    pub const QUOTE_SELL: [u8; 4] = [0xe7, 0xc9, 0x8f, 0x1a];
+    /// quoteSwapExactAmountOut(address,address,uint128) - 0x1576fa0e
+    pub const QUOTE_BUY: [u8; 4] = [0x15, 0x76, 0xfa, 0x0e];
+}
+
+/// Encode an address as a 32-byte ABI word (left-padded with zeros)
+#[inline]
+fn encode_address(addr: Address) -> [u8; 32] {
+    let mut word = [0u8; 32];
+    word[12..].copy_from_slice(addr.as_slice());
+    word
+}
+
+/// Encode a u128 as a 32-byte ABI word (left-padded with zeros)
+#[inline]
+fn encode_u128(value: u128) -> [u8; 32] {
+    let mut word = [0u8; 32];
+    word[16..].copy_from_slice(&value.to_be_bytes());
+    word
+}
+
+/// Build calldata from selector and encoded arguments
+#[inline]
+fn build_calldata(selector: [u8; 4], args: &[[u8; 32]]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(4 + args.len() * 32);
+    data.extend_from_slice(&selector);
+    for arg in args {
+        data.extend_from_slice(arg);
+    }
+    data
+}
+
+// ============================================================================
+// HTTP Client
+// ============================================================================
+
+/// HTTP client with connection pooling and timeout
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(timeout())
+            .pool_max_idle_per_host(5)
+            .pool_idle_timeout(Duration::from_secs(60))
+            .build()
+            .expect("Failed to create HTTP client")
+    })
+}
+
 #[derive(Clone)]
 pub struct TempoClient {
-    client: reqwest::Client,
-    rpc_url: String,
+    rpc_url: &'static str,
 }
 
 impl Default for TempoClient {
@@ -234,10 +416,7 @@ impl Default for TempoClient {
 
 impl TempoClient {
     pub fn new() -> Self {
-        Self {
-            client: reqwest::Client::new(),
-            rpc_url: TEMPO_TESTNET_RPC.to_string(),
-        }
+        Self { rpc_url: rpc_url() }
     }
 
     async fn call_rpc<T: for<'de> Deserialize<'de>>(
@@ -252,9 +431,8 @@ impl TempoClient {
             "id": 1
         });
 
-        let resp: RpcResponse<T> = self
-            .client
-            .post(&self.rpc_url)
+        let resp: RpcResponse<T> = http_client()
+            .post(self.rpc_url)
             .json(&body)
             .send()
             .await?
@@ -262,26 +440,25 @@ impl TempoClient {
             .await?;
 
         if let Some(error) = resp.error {
-            anyhow::bail!("RPC error {}: {}", error.code, error.message);
+            return Err(TempoError::Rpc {
+                code: error.code,
+                message: error.message,
+            });
         }
 
         resp.result
-            .ok_or_else(|| anyhow::anyhow!("No result in response"))
+            .ok_or_else(|| TempoError::Other("No result in response".into()))
     }
 
     pub async fn get_balance(&self, address: Address, token: Address) -> Result<U256> {
-        // balanceOf(address) selector = 0x70a08231
-        let data = format!(
-            "0x70a08231000000000000000000000000{}",
-            hex::encode(address.as_slice())
-        );
+        let calldata = build_calldata(selectors::BALANCE_OF, &[encode_address(address)]);
 
         let result: String = self
             .call_rpc(
                 "eth_call",
                 json!([{
                     "to": format!("{:?}", token),
-                    "data": data
+                    "data": format!("0x{}", hex::encode(&calldata))
                 }, "latest"]),
             )
             .await?;
@@ -312,14 +489,13 @@ impl TempoClient {
         token_out: Address,
         amount_in: u128,
     ) -> Result<u128> {
-        // quoteSwapExactAmountIn(address,address,uint128) selector
-        let selector = "0xe7c98f1a";
-        let data = format!(
-            "{}000000000000000000000000{}000000000000000000000000{}{:064x}",
-            selector,
-            hex::encode(token_in.as_slice()),
-            hex::encode(token_out.as_slice()),
-            amount_in
+        let calldata = build_calldata(
+            selectors::QUOTE_SELL,
+            &[
+                encode_address(token_in),
+                encode_address(token_out),
+                encode_u128(amount_in),
+            ],
         );
 
         let result: String = self
@@ -327,7 +503,7 @@ impl TempoClient {
                 "eth_call",
                 json!([{
                     "to": format!("{:?}", DEX_ADDRESS),
-                    "data": data
+                    "data": format!("0x{}", hex::encode(&calldata))
                 }, "latest"]),
             )
             .await?;
@@ -342,14 +518,13 @@ impl TempoClient {
         token_out: Address,
         amount_out: u128,
     ) -> Result<u128> {
-        // quoteSwapExactAmountOut(address,address,uint128) selector
-        let selector = "0x1576fa0e";
-        let data = format!(
-            "{}000000000000000000000000{}000000000000000000000000{}{:064x}",
-            selector,
-            hex::encode(token_in.as_slice()),
-            hex::encode(token_out.as_slice()),
-            amount_out
+        let calldata = build_calldata(
+            selectors::QUOTE_BUY,
+            &[
+                encode_address(token_in),
+                encode_address(token_out),
+                encode_u128(amount_out),
+            ],
         );
 
         let result: String = self
@@ -357,7 +532,7 @@ impl TempoClient {
                 "eth_call",
                 json!([{
                     "to": format!("{:?}", DEX_ADDRESS),
-                    "data": data
+                    "data": format!("0x{}", hex::encode(&calldata))
                 }, "latest"]),
             )
             .await?;
@@ -404,6 +579,7 @@ impl TempoClient {
         let signing_key = SigningKey::from_bytes(private_key.into())?;
         let data = Bytes::from(data);
 
+        let chain = chain_id();
         let tx_for_signing = LegacyTxForSigning {
             nonce,
             gas_price,
@@ -411,7 +587,7 @@ impl TempoClient {
             to,
             value,
             data: data.clone(),
-            chain_id: TEMPO_TESTNET_CHAIN_ID,
+            chain_id: chain,
             zero1: 0,
             zero2: 0,
         };
@@ -426,7 +602,7 @@ impl TempoClient {
         let s = U256::from_be_slice(&sig_bytes[32..]);
 
         // EIP-155: v = recovery_id + chain_id * 2 + 35
-        let v = recovery_id.to_byte() as u64 + TEMPO_TESTNET_CHAIN_ID * 2 + 35;
+        let v = recovery_id.to_byte() as u64 + chain * 2 + 35;
 
         let signed_tx = SignedLegacyTx {
             nonce,
@@ -486,13 +662,12 @@ impl TempoClient {
         to: Address,
         amount: U256,
     ) -> Result<B256> {
-        // transfer(address,uint256) selector = 0xa9059cbb
-        let mut data = vec![0xa9, 0x05, 0x9c, 0xbb];
-        data.extend_from_slice(&[0u8; 12]); // pad address to 32 bytes
-        data.extend_from_slice(to.as_slice());
-        data.extend_from_slice(&amount.to_be_bytes::<32>());
+        let calldata = build_calldata(
+            selectors::TRANSFER,
+            &[encode_address(to), amount.to_be_bytes::<32>()],
+        );
 
-        self.send_contract_call(private_key, token, data, 100_000)
+        self.send_contract_call(private_key, token, calldata, 100_000)
             .await
     }
 
@@ -504,13 +679,12 @@ impl TempoClient {
         spender: Address,
         amount: U256,
     ) -> Result<B256> {
-        // approve(address,uint256) selector = 0x095ea7b3
-        let mut data = vec![0x09, 0x5e, 0xa7, 0xb3];
-        data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(spender.as_slice());
-        data.extend_from_slice(&amount.to_be_bytes::<32>());
+        let calldata = build_calldata(
+            selectors::APPROVE,
+            &[encode_address(spender), amount.to_be_bytes::<32>()],
+        );
 
-        self.send_contract_call(private_key, token, data, 50_000)
+        self.send_contract_call(private_key, token, calldata, 50_000)
             .await
     }
 
@@ -523,30 +697,25 @@ impl TempoClient {
         amount_in: u128,
         min_amount_out: u128,
     ) -> Result<B256> {
-        // swapExactAmountIn(address,address,uint128,uint128) selector = 0xf8856c0f
-        let selector: [u8; 4] = [0xf8, 0x85, 0x6c, 0x0f];
-        let mut data = selector.to_vec();
-        data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(token_in.as_slice());
-        data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(token_out.as_slice());
-        data.extend_from_slice(&[0u8; 16]);
-        data.extend_from_slice(&amount_in.to_be_bytes());
-        data.extend_from_slice(&[0u8; 16]);
-        data.extend_from_slice(&min_amount_out.to_be_bytes());
+        let calldata = build_calldata(
+            selectors::SWAP_EXACT_IN,
+            &[
+                encode_address(token_in),
+                encode_address(token_out),
+                encode_u128(amount_in),
+                encode_u128(min_amount_out),
+            ],
+        );
 
-        self.send_contract_call(private_key, DEX_ADDRESS, data, 200_000)
+        self.send_contract_call(private_key, DEX_ADDRESS, calldata, 200_000)
             .await
     }
 
     /// Request tokens from faucet
     pub async fn faucet(&self, private_key: &[u8; 32], token: Address) -> Result<B256> {
-        // drip(address) selector = 0x23bc6c5d
-        let mut data = vec![0x23, 0xbc, 0x6c, 0x5d];
-        data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(token.as_slice());
+        let calldata = build_calldata(selectors::DRIP, &[encode_address(token)]);
 
-        self.send_contract_call(private_key, FAUCET_ADDRESS, data, 100_000)
+        self.send_contract_call(private_key, FAUCET_ADDRESS, calldata, 100_000)
             .await
     }
 }

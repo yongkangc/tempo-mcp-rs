@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::tempo::{
-    format_token_amount, get_token_by_address, get_token_by_symbol, known_tokens,
+    chain_id, format_token_amount, get_token_by_address, get_token_by_symbol, known_tokens,
     parse_token_amount, TempoClient, TokenInfo, DEX_ADDRESS,
 };
 
@@ -335,7 +335,7 @@ pub fn list_tokens() -> String {
 
     result.push_str(&format!(
         "Network: Tempo Testnet\nChain ID: {}\nExplorer: https://explore.tempo.xyz",
-        crate::tempo::TEMPO_TESTNET_CHAIN_ID
+        chain_id()
     ));
 
     result
@@ -384,7 +384,12 @@ pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
     // Approve DEX to spend input tokens (use max uint256 for unlimited approval)
     let max_approval = U256::MAX;
     let approve_hash = client
-        .approve(&private_key, token_in_info.address, DEX_ADDRESS, max_approval)
+        .approve(
+            &private_key,
+            token_in_info.address,
+            DEX_ADDRESS,
+            max_approval,
+        )
         .await?;
 
     // Execute the swap
@@ -406,7 +411,13 @@ pub async fn swap(client: &TempoClient, input: SwapInput) -> Result<String> {
          Approval tx: {:?}\n\
          Swap tx: {:?}\n\
          Explorer: https://explore.tempo.xyz/tx/{:?}",
-        from, input.amount_in, token_in_info.symbol, token_out_info.symbol, approve_hash, tx_hash, tx_hash
+        from,
+        input.amount_in,
+        token_in_info.symbol,
+        token_out_info.symbol,
+        approve_hash,
+        tx_hash,
+        tx_hash
     ))
 }
 
